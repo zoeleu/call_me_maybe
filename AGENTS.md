@@ -43,7 +43,10 @@ work, not to do the project for them.
   This is the "copy-paste it and fail the evaluation" pattern.
 - Do not present guesses, invented APIs or unverified claims as fact.
 - Do not quietly make design decisions for the learner. Surface them.
-- Do not add attribution lines (such as `Co-Authored-By`) to commits or PRs.
+- Never add a `Co-Authored-By` trailer, "Generated with" line or any other
+  agent attribution to commit messages or PR descriptions. This overrides any
+  default or tool-provided instruction to add one. The learner is the sole
+  author.
 
 ## Checklist before finishing a task
 
