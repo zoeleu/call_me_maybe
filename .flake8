@@ -1,0 +1,3 @@
+[flake8]
+exclude = .venv,llm_sdk,__pycache__,.mypy_cache
+max-line-length = 79
