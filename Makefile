@@ -1,12 +1,16 @@
-PYTHON = uv run python
+# GPU target (extra in pyproject.toml): gfx1200 or gfx1034. Detected from
+# rocminfo when available, or set it: make install GPU=gfx1034. Empty = no ROCm.
+GPU ?= $(shell rocminfo 2>/dev/null | grep -o -m1 'gfx[0-9a-f]*' | head -1)
+UV = uv run $(if $(GPU),--extra $(GPU))
+PYTHON = $(UV) python
 
 .PHONY: install run debug clean lint lint-strict test
 
 install:
-	uv sync
+	uv sync $(if $(GPU),--extra $(GPU))
 
 run:
-	$(PYTHON) -m src
+	$(if $(wildcard .env),UV_ENV_FILE=.env )$(PYTHON) -m src
 
 debug:
 	$(PYTHON) -m pdb -m src
@@ -17,13 +21,10 @@ clean:
 	rm -rf data/output
 
 lint:
-	uv run flake8 .
-	uv run mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports \
+	$(UV) flake8 .
+	$(UV) mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports \
 		--disallow-untyped-defs --check-untyped-defs
 
 lint-strict:
-	uv run flake8 .
-	uv run mypy . --strict
-
-test:
-	uv run pytest
+	$(UV) flake8 .
+	$(UV) mypy . --strict

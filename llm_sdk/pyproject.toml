@@ -7,6 +7,20 @@ dependencies = [
     "torch>=2.0.0",
     "transformers>=4.40.0",
     "huggingface-hub>=0.20.0",
+    "accelerate",
+]
+
+# One extra per GPU target. Each pulls the ROCm build of torch for that target
+# plus the matching ROCm runtime (rocm[libraries]) and pre-compiled kernels
+# (rocm[device-...]). Pick exactly one: uv sync --extra gfx1200
+[project.optional-dependencies]
+gfx1200 = [
+    "torch[device-gfx1200]==2.14.0+rocm10.1.0",
+    "rocm[libraries,device-gfx1200]==10.1.0",
+]
+gfx1034 = [
+    "torch[device-gfx1034]==2.14.0+rocm10.1.0",
+    "rocm[libraries,device-gfx1034]==10.1.0",
 ]
 
 [build-system]

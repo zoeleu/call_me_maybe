@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .venv/
+.venv-*/
 .mypy_cache/
 .pytest_cache/
 *.egg-info/
@@ -8,3 +9,7 @@ build/
 dist/
 .env
 data/output/
+.idea/
+.vscode/
+output.txt
+*.subject.pdf

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ParameterSpec(BaseModel):
@@ -32,3 +32,18 @@ class FunctionCallResult(BaseModel):
     prompt: str
     name: str
     parameters: dict[str, Any]
+
+
+class PromptConfig(BaseModel):
+    """Prompt texts and limits used by the constrained decoder."""
+
+    system_prompt: str
+    chat_template: str
+    think: bool = True
+    think_prefix: str
+    think_end: str
+    max_think_tokens: int = Field(gt=0)
+    max_value_tokens: int = Field(gt=0)
+    force_answer: str
+    answer_prefix: str
+    parameters_prefix: str

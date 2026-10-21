@@ -6,8 +6,14 @@ requires-python = ">=3.10,<3.15"
 dependencies = [
     "numpy",
     "pydantic>=2",
-    "llm-sdk",
+    "llm-sdk[gfx1200]",
 ]
+
+[project.optional-dependencies]
+gfx1200 = [
+    "llm-sdk[gfx1200]",
+]  # RX 9060 XT
+gfx1034 = ["llm-sdk[gfx1034]"]  # RX 6500 (42 computers)
 
 [dependency-groups]
 dev = [
@@ -17,7 +23,24 @@ dev = [
 ]
 
 [tool.uv.sources]
-llm-sdk = { path = "llm_sdk", editable = true }
+llm-sdk = { workspace = true }
+
+# uv only reads indexes from the root project. The ROCm wheels (torch, triton,
+# rocm-sdk-*) are on the AMD index, so it is added next to PyPI, and
+# unsafe-best-match lets uv pick across both instead of stopping at the first
+# index that has the name.
+[tool.uv]
+index-strategy = "unsafe-best-match"
+conflicts = [[{ extra = "gfx1200" }, { extra = "gfx1034" }]]
+
+[[tool.uv.index]]
+name = "amd-rocm"
+url = "https://stable.repo.amd.com/rocm/whl-next/"
+
+[tool.uv.workspace]
+members = [
+    "llm_sdk",
+]
 
 [tool.mypy]
 exclude = ["llm_sdk/", "\\.venv/"]
