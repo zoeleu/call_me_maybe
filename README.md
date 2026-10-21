@@ -436,13 +436,15 @@ environments. It also diagnosed a broken ROCm install and PyCharm run
 configuration problems.
 
 **Code in `src/`.** I wrote the project structure, the pydantic models, the
-file loading helpers and a first version of the decoder (the prompt and two
-loops for choosing names). I then asked Claude to:
+file loading helpers and a first version of the decoder: the prompt, two
+loops for choosing names, and a first, crude version of the generic
+`_generate_with(ids, allowed_next)` loop, which I designed. I then asked
+Claude to:
 
 - split the decoder into functions and move the prompts into
   `config/prompts.json`;
-- factor the name choice into `_choose_tokens`, then into the generic
-  `_generate_with(ids, allowed_next)` loop (my request; Claude wrote it);
+- refactor the name choice into `_choose_tokens`, and my
+  `_generate_with` loop into its current, cleaner form;
 - add value generation for strings and numbers, then replace it with the
   character-level state machine when merged tokens broke string closing.
   This is the core of the constraint logic, and it was written by Claude at
