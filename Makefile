@@ -1,6 +1,19 @@
-# GPU target (extra in pyproject.toml): gfx1200 or gfx1034. Detected from
-# rocminfo when available, or set it: make install GPU=gfx1034. Empty = no ROCm.
-GPU ?= $(shell rocminfo 2>/dev/null | grep -o -m1 'gfx[0-9a-f]*' | head -1)
+# Torch target (extra in pyproject.toml): cpu, gfx1200 or gfx1034. Detected
+# from rocminfo when available, or set it: make install GPU=gfx1034. Falls
+# back to cpu when no ROCm GPU is found.
+GPU ?= $(or $(shell rocminfo 2>/dev/null | grep -o -m1 'gfx[0-9a-f]*' | head -1),cpu)
+# 42 computers: we need to keep packages and the venv in ~/goinfre
+# it's fast, and plentiful ephemeral storage, perfect for this purpose
+GOINFRE := $(wildcard $(HOME)/goinfre)
+ifneq ($(GOINFRE),)
+G := $(GOINFRE)/call_me_maybe
+export UV_CACHE_DIR ?= $(G)/uv-cache
+export UV_PROJECT_ENVIRONMENT ?= $(G)/venv
+export UV_PYTHON_INSTALL_DIR ?= $(G)/python
+export UV_LINK_MODE ?= hardlink
+export HF_HOME ?= $(G)/hf
+endif
+
 UV = uv run $(if $(GPU),--extra $(GPU))
 PYTHON = $(UV) python
 
