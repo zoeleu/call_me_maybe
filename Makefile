@@ -38,6 +38,9 @@ lint:
 	$(UV) mypy . --warn-return-any --warn-unused-ignores --ignore-missing-imports \
 		--disallow-untyped-defs --check-untyped-defs
 
+test:
+	$(UV) pytest
+
 lint-strict:
 	$(UV) flake8 .
 	$(UV) mypy . --strict
