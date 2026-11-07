@@ -42,7 +42,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 class ThoughtPrinter:
-    """Stream the model's thinking to stderr in gray, then erase it.
+    """Stream the model's thinking or call to stderr in gray, then erase it.
 
     To erase, it moves the cursor back up as many rows as it printed, so it
     counts newlines and the rows the terminal wraps long lines into.
@@ -67,6 +67,11 @@ class ThoughtPrinter:
                 self.row += 1
                 self.column = 0
             self.column += 1
+
+    def rewrite(self, text: str) -> None:
+        """Replace everything printed so far with ``text``."""
+        self.clear()
+        self.write(text)
 
     def clear(self) -> None:
         """Go back to where the thinking started and erase to the end."""
@@ -100,6 +105,8 @@ def main() -> int:
         config=config,
         on_think_token=printer.write if printer else None,
         on_think_done=printer.clear if printer else None,
+        on_call_update=printer.rewrite if printer else None,
+        on_call_done=printer.clear if printer else None,
     )
     input_file = args.input
     output_file = args.output

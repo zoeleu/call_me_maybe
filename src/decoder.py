@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Any, Callable, Collection
+from typing import Any, Callable, Collection, Literal
 
 import numpy as np
 from llm_sdk import Small_LLM_Model
@@ -15,11 +15,15 @@ JSON_ESCAPABLE = '"\\/bfnrt'
 
 # Where we are in `` <value><end>``: a phase name, and how many characters
 # of ``end`` were matched (only used by the "end" phase).
-State = tuple[str, int]
+Phase = Literal[
+    "start", "space", "string", "escape",
+    "sign", "int", "period", "fraction", "end",
+]
+State = tuple[Phase, int]
 START: State = ("start", 0)
 
 
-def _string_step(phase: str, char: str) -> State | None:
+def _string_step(phase: Phase, char: str) -> State | None:
     """Advance a JSON string value by one character."""
     if phase in ("start", "space"):
         return ("string", 0) if char == '"' else None
@@ -34,7 +38,7 @@ def _string_step(phase: str, char: str) -> State | None:
     return ("string", 0)
 
 
-def _number_step(phase: str, char: str, end: str) -> State | None:
+def _number_step(phase: Phase, char: str, end: str) -> State | None:
     """Advance a number value (``-12``, ``3.5``) by one character."""
     if char in DIGITS:
         if phase in ("start", "space", "sign", "int"):
@@ -63,8 +67,10 @@ def _value_step(
         if matched < len(end) and char == end[matched]:
             return ("end", matched + 1)
         return None
-    if phase == "start" and char == " ":
-        return ("space", 0)
+    if phase == "start":
+        if char == " ":
+            return ("space", 0)
+        return None
     if value_type == "string":
         return _string_step(phase, char)
     return _number_step(phase, char, end)
@@ -92,14 +98,18 @@ class ConstrainedDecoder:
         config: PromptConfig,
         on_think_token: Callable[[str], None] | None = None,
         on_think_done: Callable[[], None] | None = None,
+        on_call_update: Callable[[str], None] | None = None,
+        on_call_done: Callable[[], None] | None = None,
     ) -> None:
         """Store the model, the functions and the prompt configuration.
 
         ``on_think_token``, if given, receives the new thinking text after
         each token. ``on_think_done``, if given, is called once thinking is
-        over. With ``config.think`` False the prompt holds an empty thinking
-        block, as Qwen3 does when thinking is disabled, and the model
-        answers at once.
+        over. ``on_call_update``, if given, receives the whole call written
+        so far, as ``name(a=1, b``, after each token; ``on_call_done`` is
+        called once the call is complete. With ``config.think`` False the
+        prompt holds an empty thinking block, as Qwen3 does when thinking is
+        disabled, and the model answers at once.
         """
         if not functions:
             raise ValueError("at least one function definition is required")
@@ -108,6 +118,8 @@ class ConstrainedDecoder:
         self.config = config
         self.on_think_token = on_think_token
         self.on_think_done = on_think_done
+        self.on_call_update = on_call_update
+        self.on_call_done = on_call_done
         vocab = load_vocab(Path(model.get_path_to_vocab_file()))
         # vocab.json keys are byte-level BPE ("Ġ" for a space), so ask the
         # model for the real text of each token instead. Empty tokens are
@@ -130,19 +142,36 @@ class ConstrainedDecoder:
         else:
             # The empty thinking block already ends with the blank line.
             ids.extend(self._encode(self.config.answer_prefix.lstrip("\n")))
-        function = self.functions[self._choose(ids, list(self.functions))]
+        function = self.functions[self._choose(
+            ids, list(self.functions), show=self._show_call
+        )]
+        self._show_call(function.name, [])
         ids.extend(self._encode(self.config.parameters_prefix))
         parameters: dict[str, Any] = {}
+        # Arguments already written, as "a=1.0", for _show_call.
+        shown: list[str] = []
         remaining = list(function.parameters)
         while remaining:
             before = ' "' if parameters else '"'
-            name = self._choose(ids, remaining, before=before, after='":')
+            name = self._choose(
+                ids, remaining, before=before, after='":',
+                show=lambda text: self._show_call(
+                    function.name, shown + [text]
+                ),
+            )
             remaining.remove(name)
             # The last value also closes "parameters" and the whole call.
             end = "," if remaining else "}}"
             parameters[name] = self._choose_value(
-                ids, function.parameters[name].type, end
+                ids, function.parameters[name].type, end,
+                show=lambda text: self._show_call(
+                    function.name, shown + [f"{name}={text}"]
+                ),
             )
+            shown.append(f"{name}={json.dumps(parameters[name])}")
+        self._show_call(function.name, shown, closed=True)
+        if self.on_call_done is not None:
+            self.on_call_done()
         return FunctionCallResult(
             prompt=prompt, name=function.name, parameters=parameters
         )
@@ -282,8 +311,30 @@ class ConstrainedDecoder:
         self.on_think_token(text[len(shown):])
         return text
 
+    def _show_call(
+        self,
+        name: str,
+        arguments: list[str] | None = None,
+        closed: bool = False,
+    ) -> None:
+        """Send the call written so far, as ``name(a=1, b``, to the user.
+
+        ``arguments`` is None while the function name is still being
+        written; ``closed`` adds the final parenthesis.
+        """
+        if self.on_call_update is None:
+            return
+        text = name
+        if arguments is not None:
+            text += "(" + ", ".join(arguments) + (")" if closed else "")
+        self.on_call_update(text)
+
     def _choose_value(
-        self, ids: list[int], value_type: str, end: str
+        self,
+        ids: list[int],
+        value_type: str,
+        end: str,
+        show: Callable[[str], None] | None = None,
     ) -> str | float:
         """Force the model to write `` <value><end>``; return the value.
 
@@ -291,15 +342,30 @@ class ConstrainedDecoder:
         model may merge the quotes with what surrounds them, as it does in
         normal text: `` "[`` or ``]",`` or ``"}}``. Past
         ``max_value_tokens``, only tokens that close the value are allowed.
+        ``show``, if given, receives the value written so far after each
+        token, without the space before it or ``end``.
         """
         if value_type not in ("string", "number"):
             raise ValueError(f"unsupported parameter type {value_type!r}")
         done: State = ("end", len(end))
 
-        def allowed_next(written: list[int]) -> set[int]:
+        def state_after(written: list[int]) -> State:
             state = START
             for token in written:
                 state = self._value_table(value_type, end, state)[token]
+            return state
+
+        def show_value(written: list[int]) -> None:
+            if show is None:
+                return
+            text = self.model.decode(written)
+            phase, matched = state_after(written)
+            if phase == "end":
+                text = text[:len(text) - matched]
+            show(text.strip())
+
+        def allowed_next(written: list[int]) -> set[int]:
+            state = state_after(written)
             if state == done:
                 return set()
             table = self._value_table(value_type, end, state)
@@ -310,7 +376,7 @@ class ConstrainedDecoder:
                     return closing
             return set(table)
 
-        written = self._generate_with(ids, allowed_next)
+        written = self._generate_with(ids, allowed_next, show_value)
         raw = self.model.decode(written)[:-len(end)].strip()
         if value_type == "string":
             return str(json.loads(raw))
@@ -336,21 +402,34 @@ class ConstrainedDecoder:
         candidates: list[str],
         before: str = "",
         after: str = '"',
+        show: Callable[[str], None] | None = None,
     ) -> str:
         """Force the model to write ``before + candidate + after``.
 
         Return the chosen candidate. Encoding the surrounding text with
         the candidate gives the model its usual tokens, such as ``":``.
+        ``show``, if given, receives the candidate written so far after each
+        token. It strips the characters of ``before`` and ``after`` from
+        both ends, so candidates must not start or end with them.
         """
+
+        def show_candidate(written: list[int]) -> None:
+            if show is not None:
+                show(self.model.decode(written).strip(before + after))
+
         index = self._choose_tokens(
             ids,
             [self._encode(before + candidate + after)
              for candidate in candidates],
+            show_candidate,
         )
         return candidates[index]
 
     def _choose_tokens(
-        self, ids: list[int], candidates: list[list[int]]
+        self,
+        ids: list[int],
+        candidates: list[list[int]],
+        on_token: Callable[[list[int]], None] | None = None,
     ) -> int:
         """Force the model to write one of ``candidates``; return its index.
 
@@ -368,18 +447,23 @@ class ConstrainedDecoder:
                 if position < len(tokens) and tokens[:position] == written
             }
 
-        return candidates.index(self._generate_with(ids, allowed_next))
+        return candidates.index(
+            self._generate_with(ids, allowed_next, on_token)
+        )
 
     def _generate_with(
         self,
         ids: list[int],
         allowed_next: Callable[[list[int]], set[int]],
+        on_token: Callable[[list[int]], None] | None = None,
     ) -> list[int]:
         """Generate tokens restricted by ``allowed_next`` and return them.
 
         ``allowed_next`` receives the tokens written so far and returns the
         tokens allowed next; an empty set ends generation. When only one
         token is allowed it is appended without asking the model.
+        ``on_token``, if given, receives the tokens written so far after
+        each token.
         """
         written: list[int] = []
         allowed = allowed_next(written)
@@ -390,6 +474,8 @@ class ConstrainedDecoder:
                 token = self._best_allowed(ids, allowed)
             ids.append(token)
             written.append(token)
+            if on_token is not None:
+                on_token(written)
             allowed = allowed_next(written)
         return written
 
