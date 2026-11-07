@@ -51,6 +51,10 @@ class PromptConfig(BaseModel):
     top_p: float = Field(gt=0, le=1)
     top_k: int = Field(gt=0)
     min_p: float = Field(ge=0, le=1)
+    # Prompt-lookup speculation: guessed tokens checked per forward pass
+    # (0 disables it), and the longest n-gram looked up to make a guess.
+    speculate_tokens: int = Field(default=8, ge=0)
+    speculate_ngram: int = Field(default=3, gt=0)
 
 
 if __name__ == "__main__":

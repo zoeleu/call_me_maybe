@@ -5,11 +5,12 @@
 # transformers, torch and huggingface_hub are only partially typed.
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
 
+import os
 from typing import cast
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, \
-    PreTrainedTokenizer, PreTrainedModel, logging
+    DynamicCache, PreTrainedTokenizer, PreTrainedModel, logging
 from huggingface_hub import hf_hub_download
 
 
@@ -32,6 +33,12 @@ class Small_LLM_Model:
         Numerical precision. When using a GPU or MPS we default to ``float16``
         to keep memory usage reasonable; on CPU we keep ``float32`` for maximum
         compatibility.
+    num_threads: int | None, default=8
+        CPU threads used by torch, capped at the number of CPUs. Decoding
+        one token is limited by memory bandwidth, not compute: past about
+        one thread per physical core, extra threads (hyper-threads,
+        efficiency cores) only slow it down. *None* keeps torch's default,
+        one thread per logical CPU.
     """
 
     def __init__(
@@ -41,8 +48,15 @@ class Small_LLM_Model:
         device: str | None = None,
         dtype: torch.dtype | None = None,
         trust_remote_code: bool = True,
+        num_threads: int | None = 8,
     ) -> None:
         self._model_name = model_name
+
+        if num_threads is not None:
+            # Process-wide setting: it affects every model in the process.
+            torch.set_num_threads(
+                max(1, min(num_threads, os.cpu_count() or 1))
+            )
 
         # Auto-select device with priority: mps > cuda > cpu
         if device is None:
@@ -86,6 +100,11 @@ class Small_LLM_Model:
         for p in self._model.parameters():
             p.requires_grad = False
 
+        # --- KV-cache state for get_logits_cached ----------------------------
+        self._cache = DynamicCache(config=self._model.config)
+        self._cached_ids: list[int] = []
+        self._last_logits: list[float] = []
+
     def encode(self, text: str) -> torch.Tensor:
         """Tokenise *text* and return a 2-D ``input_ids`` tensor.
 
@@ -118,6 +137,73 @@ class Small_LLM_Model:
         # Logits for the last token of the sequence (batch size 1)
         logits = out.logits[0, -1].tolist()
         return [float(x) for x in logits]
+
+    def get_logits_cached(self, input_ids: list[int]) -> list[float]:
+        """Same result as :py:meth:`get_logits_from_input_ids`, reusing work.
+
+        The keys and values computed for the previous ``input_ids`` are kept
+        (a KV-cache). Only the tokens after the prefix shared with the
+        previous call are run through the model, so appending one token
+        costs one token, not the whole sequence. If the new ids diverge
+        from the cached ones, the cache is cut back to the shared prefix.
+        """
+        if (input_ids and input_ids == self._cached_ids
+                and self._last_logits):
+            # Nothing new to feed: the model needs at least one token.
+            return list(self._last_logits)
+        return self.get_logits_cached_last(input_ids, 1)[0]
+
+    def get_logits_cached_last(
+        self, input_ids: list[int], count: int
+    ) -> list[list[float]]:
+        """Return the next-token logits after each of the last ``count`` ids.
+
+        Row ``i`` holds the logits that follow ``input_ids[:len(input_ids)
+        - count + i + 1]``, so the last row is what
+        :py:meth:`get_logits_cached` returns. All rows come from one forward
+        pass, which costs about as much as a single token on CPU: this is
+        what speculative decoding uses to check several guessed tokens at
+        once. Uses the same KV-cache as :py:meth:`get_logits_cached`.
+        """
+        if not input_ids:
+            raise ValueError("input_ids must not be empty")
+        if not 1 <= count <= len(input_ids):
+            raise ValueError("count must be between 1 and len(input_ids)")
+        shared = 0
+        limit = min(len(input_ids), len(self._cached_ids))
+        while (shared < limit
+               and input_ids[shared] == self._cached_ids[shared]):
+            shared += 1
+        # The last ``count`` ids must be fed to get their logits, even if
+        # they are already in the cache.
+        shared = min(shared, len(input_ids) - count)
+        if shared < len(self._cached_ids):
+            # A negative value removes that many tokens from the end;
+            # crop(0) would be a no-op, so never pass the target length.
+            self._cache.crop(shared - len(self._cached_ids))
+        new_tensor = torch.tensor(
+            [input_ids[shared:]], device=self._device, dtype=torch.long
+        )
+        try:
+            with torch.no_grad():
+                out = self._model(
+                    input_ids=new_tensor,
+                    past_key_values=self._cache,
+                    use_cache=True,
+                    # Skip the vocabulary projection for the other
+                    # positions: it is a quarter of the model's weights.
+                    logits_to_keep=count,
+                )
+        except BaseException:
+            # The cache may be half-updated: start over on the next call.
+            self._cache = DynamicCache(config=self._model.config)
+            self._cached_ids = []
+            self._last_logits = []
+            raise
+        rows = cast(list[list[float]], out.logits[0].tolist())
+        self._cached_ids = list(input_ids)
+        self._last_logits = list(rows[-1])
+        return rows
 
     def get_path_to_vocab_file(self) -> str:
         """Download (or find in the cache) the vocabulary file."""
