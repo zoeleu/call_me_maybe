@@ -249,9 +249,12 @@ class ConstrainedDecoder:
             mask[top_k_indices] = False
             scores[mask] = -np.inf
 
+        # softmax: the "soft" version of argmax, with probabilities
         probabilities = np.exp(scores - scores.max())
         probabilities /= probabilities.sum()
 
+        # pick only the necessary amount of probable tokens, if the model
+        # is certain, no need to get a lot of candidates
         if top_p < 1.0:
             # we want a descending order to get only the most probable tokens
             order = np.argsort(probabilities)[::-1]
@@ -262,6 +265,8 @@ class ConstrainedDecoder:
             # filter out less likely tokens
             probabilities[order[accumulated_ps >= top_p]] = 0.0
 
+        # filter out tokens that don't match a minimum level
+        # of confidence relative to the most probable one
         if min_p > 0.0:
             probabilities[probabilities < min_p * probabilities.max()] = 0.0
         
@@ -274,23 +279,29 @@ class ConstrainedDecoder:
     def _think(self, ids: list[int]) -> None:
         """Let the model think freely, then open the tool call.
 
-        Generation is greedy and stops at ``think_end``. If the model is
-        still thinking after ``max_think_tokens``, ``force_answer`` is
-        appended to cut it off. ``think_prefix`` is already in the prompt, so
-        it is shown first, as if the model had just written it.
+        Tokens are sampled with no constraint until ``think_end``. If the
+        model is still thinking after ``max_think_tokens``, ``force_answer``
+        is appended to cut it off. ``think_prefix`` is already in the
+        prompt, so it is shown first, as if the model had just written it.
         """
         if self.on_think_token is not None:
             self.on_think_token(self.config.think_prefix)
-        thought: list[int] = []
         shown = ""
-        for _ in range(self.config.max_think_tokens):
-            token = self._select(self.model.get_logits_from_input_ids(ids))
-            ids.append(token)
-            if token == self._think_end:
-                break
-            thought.append(token)
-            shown = self._report_thought(thought, shown)
-        else:
+
+        def allowed_next(written: list[int]) -> set[int] | None:
+            if written and written[-1] == self._think_end:
+                return set()
+            if len(written) >= self.config.max_think_tokens:
+                return set()
+            return None
+
+        def report(written: list[int]) -> None:
+            nonlocal shown
+            if written[-1] != self._think_end:
+                shown = self._report_thought(written, shown)
+
+        written = self._generate_with(ids, allowed_next, report)
+        if not written or written[-1] != self._think_end:
             ids.extend(self._encode(self.config.force_answer))
         if self.on_think_done is not None:
             self.on_think_done()
@@ -454,32 +465,109 @@ class ConstrainedDecoder:
     def _generate_with(
         self,
         ids: list[int],
-        allowed_next: Callable[[list[int]], set[int]],
+        allowed_next: Callable[[list[int]], set[int] | None],
         on_token: Callable[[list[int]], None] | None = None,
     ) -> list[int]:
         """Generate tokens restricted by ``allowed_next`` and return them.
 
         ``allowed_next`` receives the tokens written so far and returns the
-        tokens allowed next; an empty set ends generation. When only one
-        token is allowed it is appended without asking the model.
-        ``on_token``, if given, receives the tokens written so far after
-        each token.
+        tokens allowed next: None allows any token, an empty set ends
+        generation. When only one token is allowed it is appended without
+        asking the model. ``on_token``, if given, receives the tokens
+        written so far after each token.
         """
         written: list[int] = []
         allowed = allowed_next(written)
-        while allowed:
-            if len(allowed) == 1:
-                token = next(iter(allowed))
+        while allowed is None or allowed:
+            if allowed is not None and len(allowed) == 1:
+                new = [next(iter(allowed))]
             else:
-                token = self._best_allowed(ids, allowed)
-            ids.append(token)
-            written.append(token)
-            if on_token is not None:
-                on_token(written)
+                new = self._sample(ids, written, allowed_next)
+            for token in new:
+                ids.append(token)
+                written.append(token)
+                if on_token is not None:
+                    on_token(written)
             allowed = allowed_next(written)
         return written
 
-    def _best_allowed(self, ids: list[int], allowed: set[int]) -> int:
-        """Return the allowed token the model rates highest."""
-        logits = self.model.get_logits_from_input_ids(ids)
-        return self._select(logits, list(allowed))
+    def _sample(
+        self,
+        ids: list[int],
+        written: list[int],
+        allowed_next: Callable[[list[int]], set[int] | None],
+    ) -> list[int]:
+        """Sample the next token, and more if a guess makes it free.
+
+        The guess from ``_draft`` is cut where the constraints reject it,
+        then checked in the same forward pass as the next token. Position
+        by position, a token is sampled exactly as without a guess; while it
+        equals the guessed one, the logits of the next position are valid
+        and sampling goes on. The first mismatch, or the end of the guess,
+        stops it. Guesses only save forward passes: the sampled tokens follow
+        the same distribution, and use the random generator the same way.
+        """
+        draft: list[int] = []
+        for token in self._draft(ids):
+            allowed = allowed_next(written + draft)
+            if allowed is not None and token not in allowed:
+                break
+            draft.append(token)
+        new: list[int] = []
+        for position, logits in enumerate(self._logit_rows(ids + draft,
+                                                           len(draft) + 1)):
+            allowed = allowed_next(written + new)
+            if allowed is not None and not allowed:
+                break
+            if allowed is not None and len(allowed) == 1:
+                token = next(iter(allowed))
+            else:
+                token = self._select(
+                    logits, None if allowed is None else list(allowed)
+                )
+            new.append(token)
+            if position == len(draft) or token != draft[position]:
+                break
+        return new
+
+    def _draft(self, ids: list[int]) -> list[int]:
+        """Guess the next tokens by prompt lookup.
+
+        Find the latest earlier place where the last ``n`` tokens of ``ids``
+        appear, for ``n`` from ``speculate_ngram`` down to 1, and return up
+        to ``speculate_tokens`` of the tokens that followed them there.
+        Values and thoughts often copy the prompt, so these guesses are
+        often right. Without the SDK's multi-row method, never guess.
+        """
+        limit = self.config.speculate_tokens
+        if limit == 0 or not hasattr(self.model, "get_logits_cached_last"):
+            return []
+        longest = min(self.config.speculate_ngram, len(ids) - 1)
+        for size in range(longest, 0, -1):
+            tail = ids[-size:]
+            # The match must end before the last token, so that at least
+            # one token follows it.
+            for start in range(len(ids) - size - 1, -1, -1):
+                if (ids[start + size - 1] == tail[-1]
+                        and ids[start:start + size] == tail):
+                    return ids[start + size:start + size + limit]
+        return []
+
+    def _logit_rows(self, ids: list[int], count: int) -> list[list[float]]:
+        """Return the next-token logits after each of the last ``count`` ids.
+
+        ``count`` > 1 only happens when ``_draft`` found the SDK method.
+        """
+        if count > 1:
+            return self.model.get_logits_cached_last(ids, count)
+        return [self._logits(ids)]
+
+    def _logits(self, ids: list[int]) -> list[float]:
+        """Return the next-token logits for ``ids``.
+
+        Use the SDK's KV-cached method when it exists (our extended
+        llm_sdk), and fall back to the original one otherwise.
+        """
+        if hasattr(self.model, "get_logits_cached"):
+            return self.model.get_logits_cached(ids)
+        return self.model.get_logits_from_input_ids(ids)
