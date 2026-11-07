@@ -86,7 +86,7 @@ class ThoughtPrinter:
 def format_result(result: FunctionCallResult) -> str:
     """Format a result as ``name(param=value, ...)``."""
     arguments = ", ".join(
-        f"{name}={json.dumps(value)}"
+        f"{name}={json.dumps(value, indent=2)}"
         for name, value in result.parameters.items()
     )
     return f"{result.name}({arguments})"
