@@ -13,7 +13,5 @@
   "temperature": 0.6,
   "top_p": 0.95,
   "top_k": 20,
-  "min_p": 0,
-  "speculate_tokens": 8,
-  "speculate_ngram": 3
+  "min_p": 0
 }

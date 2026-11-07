@@ -17,6 +17,15 @@ from huggingface_hub import hf_hub_download
 logging.set_verbosity_error()  # keep the console clean
 
 
+def _shared_prefix(first: list[int], second: list[int]) -> int:
+    """Return how many leading ids ``first`` and ``second`` have in common."""
+    shared = 0
+    limit = min(len(first), len(second))
+    while shared < limit and first[shared] == second[shared]:
+        shared += 1
+    return shared
+
+
 class Small_LLM_Model:
     """Utility class wrapping a lightweight Hugging Face causal-LM for fast,
     low-memory experimentation.
@@ -147,36 +156,15 @@ class Small_LLM_Model:
         costs one token, not the whole sequence. If the new ids diverge
         from the cached ones, the cache is cut back to the shared prefix.
         """
-        if (input_ids and input_ids == self._cached_ids
-                and self._last_logits):
-            # Nothing new to feed: the model needs at least one token.
-            return list(self._last_logits)
-        return self.get_logits_cached_last(input_ids, 1)[0]
-
-    def get_logits_cached_last(
-        self, input_ids: list[int], count: int
-    ) -> list[list[float]]:
-        """Return the next-token logits after each of the last ``count`` ids.
-
-        Row ``i`` holds the logits that follow ``input_ids[:len(input_ids)
-        - count + i + 1]``, so the last row is what
-        :py:meth:`get_logits_cached` returns. All rows come from one forward
-        pass, which costs about as much as a single token on CPU: this is
-        what speculative decoding uses to check several guessed tokens at
-        once. Uses the same KV-cache as :py:meth:`get_logits_cached`.
-        """
         if not input_ids:
             raise ValueError("input_ids must not be empty")
-        if not 1 <= count <= len(input_ids):
-            raise ValueError("count must be between 1 and len(input_ids)")
-        shared = 0
-        limit = min(len(input_ids), len(self._cached_ids))
-        while (shared < limit
-               and input_ids[shared] == self._cached_ids[shared]):
-            shared += 1
-        # The last ``count`` ids must be fed to get their logits, even if
-        # they are already in the cache.
-        shared = min(shared, len(input_ids) - count)
+        if input_ids == self._cached_ids and self._last_logits:
+            # Nothing new to feed: the model needs at least one token.
+            return list(self._last_logits)
+        # The last id is fed again when it is already cached, to get the
+        # logits that follow it.
+        shared = min(_shared_prefix(input_ids, self._cached_ids),
+                     len(input_ids) - 1)
         if shared < len(self._cached_ids):
             # A negative value removes that many tokens from the end;
             # crop(0) would be a no-op, so never pass the target length.
@@ -192,7 +180,7 @@ class Small_LLM_Model:
                     use_cache=True,
                     # Skip the vocabulary projection for the other
                     # positions: it is a quarter of the model's weights.
-                    logits_to_keep=count,
+                    logits_to_keep=1,
                 )
         except BaseException:
             # The cache may be half-updated: start over on the next call.
@@ -200,10 +188,9 @@ class Small_LLM_Model:
             self._cached_ids = []
             self._last_logits = []
             raise
-        rows = cast(list[list[float]], out.logits[0].tolist())
         self._cached_ids = list(input_ids)
-        self._last_logits = list(rows[-1])
-        return rows
+        self._last_logits = cast(list[float], out.logits[0, -1].tolist())
+        return list(self._last_logits)
 
     def get_path_to_vocab_file(self) -> str:
         """Download (or find in the cache) the vocabulary file."""

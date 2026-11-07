@@ -23,7 +23,7 @@ install:
 	uv sync $(if $(GPU),--extra $(GPU))
 
 run:
-	$(if $(wildcard .env),UV_ENV_FILE=.env )$(PYTHON) -m src
+	$(if $(wildcard .env),UV_ENV_FILE=.env )$(PYTHON) -m src $(ARGS)
 
 debug:
 	$(PYTHON) -m pdb -m src

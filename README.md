@@ -281,6 +281,7 @@ described by a small state machine over characters, for the text
 | string: after the opening `"` | anything but a control character; `\` → `escape`; `"` → `end` |
 | string: `escape` | one of `" \ / b f n r t` → back to the string |
 | number | an optional leading `-`, digits, at most one `.` followed by digits |
+| integer | the same as number, but `.` is never allowed |
 | `end` | the characters of `end` (`,` or `}}`), in order |
 
 A token is allowed if **every character of its text** can be fed to the
@@ -295,8 +296,10 @@ steps are dictionary lookups.
 
 To make sure a value always ends, after `max_value_tokens` (64) tokens only
 tokens that close the value are allowed. The written text is then parsed:
-`json.loads` for strings, `float` for numbers. Numbers are always output as
-floats (`2` → `2.0`), as in the subject's examples.
+`json.loads` for strings, `float` for numbers, `int` for integers. Numbers
+are always output as floats (`2` → `2.0`), as in the subject's examples;
+integers stay integers (`7`), since a function declared with `n: int` may
+check `isinstance(n, int)` and reject `7.0`.
 
 ### Showing the call while it is written
 

@@ -51,36 +51,7 @@ def test_cached_matches_uncached(model: Small_LLM_Model) -> None:
         )
 
 
-def test_last_rows_match_each_prefix(model: Small_LLM_Model) -> None:
-    """Row i holds the logits after the i-th of the last ``count`` ids."""
-    prompt = _ids(model, "<|im_start|>user\nGreet shrek<|im_end|>\n")
-    draft = _ids(model, "<|im_start|>assistant\nHello")
-    model.get_logits_cached(prompt)  # the prompt is now cached
-    ids = prompt + draft
-    count = len(draft) + 1
-    rows = model.get_logits_cached_last(ids, count)
-    assert len(rows) == count
-    for i, row in enumerate(rows):
-        prefix = ids[:len(ids) - count + i + 1]
-        _assert_close(row, model.get_logits_from_input_ids(prefix))
-
-
-def test_rejected_draft_rolls_back(model: Small_LLM_Model) -> None:
-    """After checking a draft, a shorter call still gives correct logits."""
-    prompt = _ids(model, "<|im_start|>user\nWhat is 7 * 6?<|im_end|>\n")
-    draft = _ids(model, " this guess is wrong")
-    model.get_logits_cached_last(prompt + draft, len(draft) + 1)
-    accepted = prompt + draft[:1]
-    _assert_close(
-        model.get_logits_cached(accepted),
-        model.get_logits_from_input_ids(accepted),
-    )
-
-
-@pytest.mark.parametrize("ids, count", [([], 1), ([1, 2], 0), ([1, 2], 3)])
-def test_invalid_arguments(
-    model: Small_LLM_Model, ids: list[int], count: int
-) -> None:
-    """Empty ids and out-of-range counts raise ValueError."""
+def test_empty_ids_raise(model: Small_LLM_Model) -> None:
+    """Empty input ids raise ValueError."""
     with pytest.raises(ValueError):
-        model.get_logits_cached_last(ids, count)
+        model.get_logits_cached([])

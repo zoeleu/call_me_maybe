@@ -65,18 +65,6 @@
       "minimum": 0,
       "title": "Min P",
       "type": "number"
-    },
-    "speculate_tokens": {
-      "default": 8,
-      "minimum": 0,
-      "title": "Speculate Tokens",
-      "type": "integer"
-    },
-    "speculate_ngram": {
-      "default": 3,
-      "exclusiveMinimum": 0,
-      "title": "Speculate Ngram",
-      "type": "integer"
     }
   },
   "required": [

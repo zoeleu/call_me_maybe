@@ -73,6 +73,9 @@ def _value_step(
         return None
     if value_type == "string":
         return _string_step(phase, char)
+    # An integer is a number that never reaches its fraction part.
+    if value_type == "integer" and char == ".":
+        return None
     return _number_step(phase, char, end)
 
 
@@ -286,22 +289,16 @@ class ConstrainedDecoder:
         """
         if self.on_think_token is not None:
             self.on_think_token(self.config.think_prefix)
+        thought: list[int] = []
         shown = ""
-
-        def allowed_next(written: list[int]) -> set[int] | None:
-            if written and written[-1] == self._think_end:
-                return set()
-            if len(written) >= self.config.max_think_tokens:
-                return set()
-            return None
-
-        def report(written: list[int]) -> None:
-            nonlocal shown
-            if written[-1] != self._think_end:
-                shown = self._report_thought(written, shown)
-
-        written = self._generate_with(ids, allowed_next, report)
-        if not written or written[-1] != self._think_end:
+        for _ in range(self.config.max_think_tokens):
+            token = self._select(self._logits(ids))
+            ids.append(token)
+            if token == self._think_end:
+                break
+            thought.append(token)
+            shown = self._report_thought(thought, shown)
+        else:
             ids.extend(self._encode(self.config.force_answer))
         if self.on_think_done is not None:
             self.on_think_done()
@@ -346,7 +343,7 @@ class ConstrainedDecoder:
         value_type: str,
         end: str,
         show: Callable[[str], None] | None = None,
-    ) -> str | float:
+    ) -> str | float | int:
         """Force the model to write `` <value><end>``; return the value.
 
         Tokens are checked by their text, character by character, so the
@@ -356,7 +353,7 @@ class ConstrainedDecoder:
         ``show``, if given, receives the value written so far after each
         token, without the space before it or ``end``.
         """
-        if value_type not in ("string", "number"):
+        if value_type not in ("string", "number", "integer"):
             raise ValueError(f"unsupported parameter type {value_type!r}")
         done: State = ("end", len(end))
 
@@ -391,6 +388,8 @@ class ConstrainedDecoder:
         raw = self.model.decode(written)[:-len(end)].strip()
         if value_type == "string":
             return str(json.loads(raw))
+        if value_type == "integer":
+            return int(raw)
         return float(raw)
 
     def _value_table(
@@ -465,102 +464,34 @@ class ConstrainedDecoder:
     def _generate_with(
         self,
         ids: list[int],
-        allowed_next: Callable[[list[int]], set[int] | None],
+        allowed_next: Callable[[list[int]], set[int]],
         on_token: Callable[[list[int]], None] | None = None,
     ) -> list[int]:
         """Generate tokens restricted by ``allowed_next`` and return them.
 
         ``allowed_next`` receives the tokens written so far and returns the
-        tokens allowed next: None allows any token, an empty set ends
-        generation. When only one token is allowed it is appended without
-        asking the model. ``on_token``, if given, receives the tokens
-        written so far after each token.
+        tokens allowed next; an empty set ends generation. When only one
+        token is allowed it is appended without asking the model.
+        ``on_token``, if given, receives the tokens written so far after
+        each token.
         """
         written: list[int] = []
         allowed = allowed_next(written)
-        while allowed is None or allowed:
-            if allowed is not None and len(allowed) == 1:
-                new = [next(iter(allowed))]
+        while allowed:
+            if len(allowed) == 1:
+                token = next(iter(allowed))
             else:
-                new = self._sample(ids, written, allowed_next)
-            for token in new:
-                ids.append(token)
-                written.append(token)
-                if on_token is not None:
-                    on_token(written)
+                token = self._best_allowed(ids, allowed)
+            ids.append(token)
+            written.append(token)
+            if on_token is not None:
+                on_token(written)
             allowed = allowed_next(written)
         return written
 
-    def _sample(
-        self,
-        ids: list[int],
-        written: list[int],
-        allowed_next: Callable[[list[int]], set[int] | None],
-    ) -> list[int]:
-        """Sample the next token, and more if a guess makes it free.
-
-        The guess from ``_draft`` is cut where the constraints reject it,
-        then checked in the same forward pass as the next token. Position
-        by position, a token is sampled exactly as without a guess; while it
-        equals the guessed one, the logits of the next position are valid
-        and sampling goes on. The first mismatch, or the end of the guess,
-        stops it. Guesses only save forward passes: the sampled tokens follow
-        the same distribution, and use the random generator the same way.
-        """
-        draft: list[int] = []
-        for token in self._draft(ids):
-            allowed = allowed_next(written + draft)
-            if allowed is not None and token not in allowed:
-                break
-            draft.append(token)
-        new: list[int] = []
-        for position, logits in enumerate(self._logit_rows(ids + draft,
-                                                           len(draft) + 1)):
-            allowed = allowed_next(written + new)
-            if allowed is not None and not allowed:
-                break
-            if allowed is not None and len(allowed) == 1:
-                token = next(iter(allowed))
-            else:
-                token = self._select(
-                    logits, None if allowed is None else list(allowed)
-                )
-            new.append(token)
-            if position == len(draft) or token != draft[position]:
-                break
-        return new
-
-    def _draft(self, ids: list[int]) -> list[int]:
-        """Guess the next tokens by prompt lookup.
-
-        Find the latest earlier place where the last ``n`` tokens of ``ids``
-        appear, for ``n`` from ``speculate_ngram`` down to 1, and return up
-        to ``speculate_tokens`` of the tokens that followed them there.
-        Values and thoughts often copy the prompt, so these guesses are
-        often right. Without the SDK's multi-row method, never guess.
-        """
-        limit = self.config.speculate_tokens
-        if limit == 0 or not hasattr(self.model, "get_logits_cached_last"):
-            return []
-        longest = min(self.config.speculate_ngram, len(ids) - 1)
-        for size in range(longest, 0, -1):
-            tail = ids[-size:]
-            # The match must end before the last token, so that at least
-            # one token follows it.
-            for start in range(len(ids) - size - 1, -1, -1):
-                if (ids[start + size - 1] == tail[-1]
-                        and ids[start:start + size] == tail):
-                    return ids[start + size:start + size + limit]
-        return []
-
-    def _logit_rows(self, ids: list[int], count: int) -> list[list[float]]:
-        """Return the next-token logits after each of the last ``count`` ids.
-
-        ``count`` > 1 only happens when ``_draft`` found the SDK method.
-        """
-        if count > 1:
-            return self.model.get_logits_cached_last(ids, count)
-        return [self._logits(ids)]
+    def _best_allowed(self, ids: list[int], allowed: set[int]) -> int:
+        """Sample a token among ``allowed`` from the model's logits."""
+        return self._select(self._logits(ids), list(allowed))
 
     def _logits(self, ids: list[int]) -> list[float]:
         """Return the next-token logits for ``ids``.
