@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Collection
 
 import numpy as np
 from llm_sdk import Small_LLM_Model
@@ -113,6 +113,7 @@ class ConstrainedDecoder:
         # model for the real text of each token instead. Empty tokens are
         # dropped: they would let generation loop without making progress.
         self._token_text: dict[int, str] = {}
+        self._rng = np.random.default_rng(42)
         for token in vocab.values():
             text = model.decode([token])
             if text:
@@ -192,6 +193,55 @@ class ConstrainedDecoder:
             },
         }
 
+    def _select(self, logits: list[float], valid: list[int] | None = None) -> int:
+        """Implement proper token selection, as Qwen recommends.
+        Greedy decoding is explicitly discouraged for Qwen models.
+        """
+        temperature = self.config.temperature
+        top_p = self.config.top_p
+        top_k = self.config.top_k
+        min_p = self.config.min_p
+
+        scores = np.array(logits)
+
+        # Mask invalid tokens so they are never chosen.
+        if valid is not None:
+            mask = np.ones_like(scores, dtype=bool)
+            mask[valid] = False
+            scores[mask] = -np.inf
+
+        scores /= temperature
+
+        # top_k > 0 in the config model, no need to check again
+        k = min(top_k, len(scores))
+        if k < len(scores):
+            top_k_indices = np.argpartition(scores, -k)[-k:]
+            mask = np.ones_like(scores, dtype=bool)
+            mask[top_k_indices] = False
+            scores[mask] = -np.inf
+
+        probabilities = np.exp(scores - scores.max())
+        probabilities /= probabilities.sum()
+
+        if top_p < 1.0:
+            # we want a descending order to get only the most probable tokens
+            order = np.argsort(probabilities)[::-1]
+            # sorted list of the probabilities
+            probabilities_sorted = probabilities[order]
+            # the running total of probabilities, minus its own probability
+            accumulated_ps = np.cumsum(probabilities_sorted) - probabilities_sorted
+            # filter out less likely tokens
+            probabilities[order[accumulated_ps >= top_p]] = 0.0
+
+        if min_p > 0.0:
+            probabilities[probabilities < min_p * probabilities.max()] = 0.0
+        
+        # normalize remaining values
+        probabilities /= probabilities.sum()
+
+        # draw the final token
+        return int(self._rng.choice(len(probabilities), p=probabilities))
+
     def _think(self, ids: list[int]) -> None:
         """Let the model think freely, then open the tool call.
 
@@ -205,7 +255,7 @@ class ConstrainedDecoder:
         thought: list[int] = []
         shown = ""
         for _ in range(self.config.max_think_tokens):
-            token = int(np.argmax(self.model.get_logits_from_input_ids(ids)))
+            token = self._select(self.model.get_logits_from_input_ids(ids))
             ids.append(token)
             if token == self._think_end:
                 break
@@ -346,4 +396,4 @@ class ConstrainedDecoder:
     def _best_allowed(self, ids: list[int], allowed: set[int]) -> int:
         """Return the allowed token the model rates highest."""
         logits = self.model.get_logits_from_input_ids(ids)
-        return max(allowed, key=lambda token: logits[token])
+        return self._select(logits, list(allowed))
