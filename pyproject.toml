@@ -6,13 +6,12 @@ requires-python = ">=3.10,<3.15"
 dependencies = [
     "numpy",
     "pydantic>=2",
-    "llm-sdk[gfx1200]",
+    "llm-sdk",
 ]
 
 [project.optional-dependencies]
-gfx1200 = [
-    "llm-sdk[gfx1200]",
-]  # RX 9060 XT
+cpu = ["llm-sdk[cpu]"]  # default: no usable GPU
+gfx1200 = ["llm-sdk[gfx1200]"]  # RX 9060 XT
 gfx1034 = ["llm-sdk[gfx1034]"]  # RX 6500 (42 computers)
 
 [dependency-groups]
@@ -31,11 +30,29 @@ llm-sdk = { workspace = true }
 # index that has the name.
 [tool.uv]
 index-strategy = "unsafe-best-match"
-conflicts = [[{ extra = "gfx1200" }, { extra = "gfx1034" }]]
+conflicts = [
+    [
+        { extra = "cpu" },
+        { extra = "gfx1200" },
+        { extra = "gfx1034" },
+    ],
+    [
+        { package = "llm-sdk", extra = "cpu" },
+        { package = "llm-sdk", extra = "gfx1200" },
+        { package = "llm-sdk", extra = "gfx1034" },
+    ],
+]
 
 [[tool.uv.index]]
 name = "amd-rocm"
 url = "https://stable.repo.amd.com/rocm/whl-next/"
+
+# CPU-only torch. explicit: only used for packages that name it in
+# tool.uv.sources (torch, with the cpu extra), so it never shadows PyPI.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.uv.workspace]
 members = [
