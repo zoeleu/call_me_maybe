@@ -12,4 +12,5 @@ data/output/
 .idea/
 .vscode/
 output.txt
-*.subject.pdf
+subject.pdf
+*sheet.pdf
