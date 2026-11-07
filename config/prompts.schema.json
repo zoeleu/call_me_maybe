@@ -1,0 +1,87 @@
+{
+  "description": "Prompt texts and limits used by the constrained decoder.",
+  "properties": {
+    "system_prompt": {
+      "title": "System Prompt",
+      "type": "string"
+    },
+    "chat_template": {
+      "title": "Chat Template",
+      "type": "string"
+    },
+    "think": {
+      "default": true,
+      "title": "Think",
+      "type": "boolean"
+    },
+    "think_prefix": {
+      "title": "Think Prefix",
+      "type": "string"
+    },
+    "think_end": {
+      "title": "Think End",
+      "type": "string"
+    },
+    "max_think_tokens": {
+      "exclusiveMinimum": 0,
+      "title": "Max Think Tokens",
+      "type": "integer"
+    },
+    "max_value_tokens": {
+      "exclusiveMinimum": 0,
+      "title": "Max Value Tokens",
+      "type": "integer"
+    },
+    "force_answer": {
+      "title": "Force Answer",
+      "type": "string"
+    },
+    "answer_prefix": {
+      "title": "Answer Prefix",
+      "type": "string"
+    },
+    "parameters_prefix": {
+      "title": "Parameters Prefix",
+      "type": "string"
+    },
+    "temperature": {
+      "exclusiveMinimum": 0,
+      "title": "Temperature",
+      "type": "number"
+    },
+    "top_p": {
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Top P",
+      "type": "number"
+    },
+    "top_k": {
+      "exclusiveMinimum": 0,
+      "title": "Top K",
+      "type": "integer"
+    },
+    "min_p": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Min P",
+      "type": "number"
+    }
+  },
+  "required": [
+    "system_prompt",
+    "chat_template",
+    "think_prefix",
+    "think_end",
+    "max_think_tokens",
+    "max_value_tokens",
+    "force_answer",
+    "answer_prefix",
+    "parameters_prefix",
+    "temperature",
+    "top_p",
+    "top_k",
+    "min_p"
+  ],
+  "title": "PromptConfig",
+  "type": "object"
+}

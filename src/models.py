@@ -47,3 +47,14 @@ class PromptConfig(BaseModel):
     force_answer: str
     answer_prefix: str
     parameters_prefix: str
+    temperature: float = Field(gt=0)
+    top_p: float = Field(gt=0, le=1)
+    top_k: int = Field(gt=0)
+    min_p: float = Field(ge=0, le=1)
+
+
+if __name__ == "__main__":
+    import json
+
+    with open("config/prompts.schema.json", "w") as f:
+        json.dump(PromptConfig.model_json_schema(), f, indent=2)
