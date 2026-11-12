@@ -2,12 +2,11 @@
 
 import json
 from pathlib import Path
-from typing import Any, Callable, Collection, Literal
+from typing import Any, Callable, Literal
 
-import numpy as np
 from llm_sdk import Small_LLM_Model
 
-from .io_utils import load_vocab
+from .io_utils import load_tokenizer_vocab
 from .models import FunctionCallResult, FunctionDefinition, PromptConfig
 
 DIGITS = "0123456789"
@@ -99,52 +98,40 @@ class ConstrainedDecoder:
         model: Small_LLM_Model,
         functions: list[FunctionDefinition],
         config: PromptConfig,
-        on_think_token: Callable[[str], None] | None = None,
-        on_think_done: Callable[[], None] | None = None,
         on_call_update: Callable[[str], None] | None = None,
         on_call_done: Callable[[], None] | None = None,
     ) -> None:
         """Store the model, the functions and the prompt configuration.
 
-        ``on_think_token``, if given, receives the new thinking text after
-        each token. ``on_think_done``, if given, is called once thinking is
-        over. ``on_call_update``, if given, receives the whole call written
-        so far, as ``name(a=1, b``, after each token; ``on_call_done`` is
-        called once the call is complete. With ``config.think`` False the
-        prompt holds an empty thinking block, as Qwen3 does when thinking is
-        disabled, and the model answers at once.
+        ``on_call_update``, if given, receives the whole call written so
+        far, as ``name(a=1, b``, after each token; ``on_call_done`` is
+        called once the call is complete.
         """
         if not functions:
             raise ValueError("at least one function definition is required")
         self.model = model
         self.functions = {function.name: function for function in functions}
         self.config = config
-        self.on_think_token = on_think_token
-        self.on_think_done = on_think_done
         self.on_call_update = on_call_update
         self.on_call_done = on_call_done
-        vocab = load_vocab(Path(model.get_path_to_vocab_file()))
-        # vocab.json keys are byte-level BPE ("Ġ" for a space), so ask the
-        # model for the real text of each token instead. Empty tokens are
-        # dropped: they would let generation loop without making progress.
+        vocab = load_tokenizer_vocab(Path(model.get_path_to_tokenizer_file()))
+        # The vocabulary's keys are not the real text ("Ġ" or "▁" stand for
+        # a space), so ask the model for the text of each token instead.
+        # Empty tokens (special tokens) are dropped: they would let
+        # generation loop without making progress.
         self._token_text: dict[int, str] = {}
-        self._rng = np.random.default_rng(42)
         for token in vocab.values():
             text = model.decode([token])
             if text:
                 self._token_text[token] = text
-        self._think_end = self._single_token(config.think_end)
         # Cache of _value_table results, filled on first use.
         self._tables: dict[tuple[str, str, State], dict[int, State]] = {}
 
     def generate_call(self, prompt: str) -> FunctionCallResult:
         """Choose a function and its arguments for ``prompt`` using the LLM."""
-        ids = self._encode(self._build_prompt(prompt))
-        if self.config.think:
-            self._think(ids)
-        else:
-            # The empty thinking block already ends with the blank line.
-            ids.extend(self._encode(self.config.answer_prefix.lstrip("\n")))
+        ids = self._encode(
+            self._build_prompt(prompt) + self.config.answer_prefix
+        )
         function = self.functions[self._choose(
             ids, list(self.functions), show=self._show_call
         )]
@@ -183,32 +170,24 @@ class ConstrainedDecoder:
         """Tokenize ``text`` into a flat list of token ids."""
         return [int(i) for i in self.model.encode(text)[0]]
 
-    def _single_token(self, text: str) -> int:
-        """Return the id of ``text``, which must be exactly one token."""
-        tokens = self._encode(text)
-        if len(tokens) != 1:
-            raise ValueError(f"{text!r} must be a single token")
-        return tokens[0]
-
     def _build_prompt(self, prompt: str) -> str:
         """Fill the chat template with the system message and ``prompt``.
 
         Functions are listed in the system prompt (at ``{tools}``) as one
         JSON signature per line, the way Qwen's Hermes-style template does.
+        The chat template comes from the config, so each model gets its own
+        turn markers; it ends where the assistant's answer starts.
         """
         tools = "\n".join(
-            json.dumps(self._qwen_tool(function))
+            json.dumps(self._tool_schema(function))
             for function in self.functions.values()
         )
         system = self.config.system_prompt.replace("{tools}", tools)
-        text = self.config.chat_template.format(system=system, user=prompt)
-        if self.config.think:
-            return text + self.config.think_prefix
-        return text + "\n\n" + self.config.think_end + "\n\n"
+        return self.config.chat_template.format(system=system, user=prompt)
 
     @staticmethod
-    def _qwen_tool(function: FunctionDefinition) -> dict[str, Any]:
-        """Convert ``function`` to the JSON-schema form Qwen was trained on."""
+    def _tool_schema(function: FunctionDefinition) -> dict[str, Any]:
+        """Convert ``function`` to the JSON-schema form used for tools."""
         return {
             "type": "function",
             "function": {
@@ -224,100 +203,6 @@ class ConstrainedDecoder:
                 },
             },
         }
-
-    def _select(self, logits: list[float], valid: list[int] | None = None) -> int:
-        """Implement proper token selection, as Qwen recommends.
-        Greedy decoding is explicitly discouraged for Qwen models.
-        """
-        temperature = self.config.temperature
-        top_p = self.config.top_p
-        top_k = self.config.top_k
-        min_p = self.config.min_p
-
-        scores = np.array(logits)
-
-        # Mask invalid tokens so they are never chosen.
-        if valid is not None:
-            mask = np.ones_like(scores, dtype=bool)
-            mask[valid] = False
-            scores[mask] = -np.inf
-
-        scores /= temperature
-
-        # top_k > 0 in the config model, no need to check again
-        k = min(top_k, len(scores))
-        if k < len(scores):
-            top_k_indices = np.argpartition(scores, -k)[-k:]
-            mask = np.ones_like(scores, dtype=bool)
-            mask[top_k_indices] = False
-            scores[mask] = -np.inf
-
-        # softmax: the "soft" version of argmax, with probabilities
-        probabilities = np.exp(scores - scores.max())
-        probabilities /= probabilities.sum()
-
-        # pick only the necessary amount of probable tokens, if the model
-        # is certain, no need to get a lot of candidates
-        if top_p < 1.0:
-            # we want a descending order to get only the most probable tokens
-            order = np.argsort(probabilities)[::-1]
-            # sorted list of the probabilities
-            probabilities_sorted = probabilities[order]
-            # the running total of probabilities, minus its own probability
-            accumulated_ps = np.cumsum(probabilities_sorted) - probabilities_sorted
-            # filter out less likely tokens
-            probabilities[order[accumulated_ps >= top_p]] = 0.0
-
-        # filter out tokens that don't match a minimum level
-        # of confidence relative to the most probable one
-        if min_p > 0.0:
-            probabilities[probabilities < min_p * probabilities.max()] = 0.0
-        
-        # normalize remaining values
-        probabilities /= probabilities.sum()
-
-        # draw the final token
-        return int(self._rng.choice(len(probabilities), p=probabilities))
-
-    def _think(self, ids: list[int]) -> None:
-        """Let the model think freely, then open the tool call.
-
-        Tokens are sampled with no constraint until ``think_end``. If the
-        model is still thinking after ``max_think_tokens``, ``force_answer``
-        is appended to cut it off. ``think_prefix`` is already in the
-        prompt, so it is shown first, as if the model had just written it.
-        """
-        if self.on_think_token is not None:
-            self.on_think_token(self.config.think_prefix)
-        thought: list[int] = []
-        shown = ""
-        for _ in range(self.config.max_think_tokens):
-            token = self._select(self._logits(ids))
-            ids.append(token)
-            if token == self._think_end:
-                break
-            thought.append(token)
-            shown = self._report_thought(thought, shown)
-        else:
-            ids.extend(self._encode(self.config.force_answer))
-        if self.on_think_done is not None:
-            self.on_think_done()
-        ids.extend(self._encode(self.config.answer_prefix))
-
-    def _report_thought(self, thought: list[int], shown: str) -> str:
-        """Send the thinking text not shown yet to ``on_think_token``.
-
-        A token can hold part of a multi-byte character, which decodes as
-        "\\ufffd"; that text is held back until a later token completes it.
-        Return the text shown so far.
-        """
-        if self.on_think_token is None:
-            return shown
-        text = self.model.decode(thought)
-        if text.endswith("�") or len(text) == len(shown):
-            return shown
-        self.on_think_token(text[len(shown):])
-        return text
 
     def _show_call(
         self,
@@ -490,8 +375,13 @@ class ConstrainedDecoder:
         return written
 
     def _best_allowed(self, ids: list[int], allowed: set[int]) -> int:
-        """Sample a token among ``allowed`` from the model's logits."""
-        return self._select(self._logits(ids), list(allowed))
+        """Return the token of ``allowed`` the model scores highest.
+
+        This is greedy decoding: no randomness, so the same prompt always
+        gives the same call.
+        """
+        logits = self._logits(ids)
+        return max(allowed, key=lambda token: logits[token])
 
     def _logits(self, ids: list[int]) -> list[float]:
         """Return the next-token logits for ``ids``.

@@ -41,8 +41,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-class ThoughtPrinter:
-    """Stream the model's thinking or call to stderr in gray, then erase it.
+class CallPrinter:
+    """Draw the call being written on stderr in gray, then erase it.
 
     To erase, it moves the cursor back up as many rows as it printed, so it
     counts newlines and the rows the terminal wraps long lines into.
@@ -74,7 +74,7 @@ class ThoughtPrinter:
         self.write(text)
 
     def clear(self) -> None:
-        """Go back to where the thinking started and erase to the end."""
+        """Go back to where the text started and erase to the end."""
         # "\033[nA" moves up n rows ("\033[0A" would still move up one);
         # "\033[J" erases from the cursor to the end of the screen.
         up = f"\033[{self.row}A" if self.row else ""
@@ -95,16 +95,14 @@ def format_result(result: FunctionCallResult) -> str:
 def main() -> int:
     """Run the pipeline; return a process exit code."""
     args = parse_args(sys.argv[1:])
-    model = llm_sdk.Small_LLM_Model()
     functions = src.load_functions(args.functions_definition)
     config = src.load_prompt_config(args.prompts_config)
-    printer = ThoughtPrinter() if sys.stderr.isatty() else None
+    model = llm_sdk.Small_LLM_Model(config.model_name)
+    printer = CallPrinter() if sys.stderr.isatty() else None
     decoder = src.ConstrainedDecoder(
         model=model,
         functions=functions,
         config=config,
-        on_think_token=printer.write if printer else None,
-        on_think_done=printer.clear if printer else None,
         on_call_update=printer.rewrite if printer else None,
         on_call_done=printer.clear if printer else None,
     )
@@ -121,7 +119,7 @@ def main() -> int:
             output.append(result)
             print(format_result(result), file=sys.stderr, flush=True)
     finally:
-        # Also erase the thinking if generation crashes or is interrupted.
+        # Also erase the gray line if generation crashes or is interrupted.
         if printer:
             printer.clear()
     write_results(output_file, output)

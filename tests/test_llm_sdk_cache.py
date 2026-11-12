@@ -1,6 +1,7 @@
 """Check the SDK's KV-cached logits against the uncached reference.
 
-Loads Qwen3-0.6B once for the module (about 3 GB of RAM, ~20 s on CPU).
+Loads each supported model in turn (up to about 4 GB of RAM). A model
+that cannot be downloaded (Gemma is gated and needs ``HF_TOKEN``) is skipped.
 """
 
 import numpy as np
@@ -11,10 +12,16 @@ from llm_sdk import Small_LLM_Model
 TOLERANCE = 1e-3
 
 
-@pytest.fixture(scope="module")
-def model() -> Small_LLM_Model:
-    """Load the model once for every test in this file."""
-    return Small_LLM_Model()
+MODELS = ["Qwen/Qwen3-0.6B", "Qwen/Qwen3.5-0.8B", "google/gemma-3-270m-it"]
+
+
+@pytest.fixture(scope="module", params=MODELS)
+def model(request: pytest.FixtureRequest) -> Small_LLM_Model:
+    """Load each model once for every test in this file."""
+    try:
+        return Small_LLM_Model(request.param)
+    except OSError as error:
+        pytest.skip(f"{request.param} is not available: {error}")
 
 
 def _ids(model: Small_LLM_Model, text: str) -> list[int]:
@@ -31,9 +38,12 @@ def _assert_close(got: list[float], expected: list[float]) -> None:
 
 def test_cached_matches_uncached(model: Small_LLM_Model) -> None:
     """Every way the ids can change between calls gives correct logits."""
-    base = _ids(model, "<|im_start|>user\nWhat is 2 + 3?<|im_end|>\n")
-    other = _ids(model, "<|im_start|>user\nReverse 'hello'<|im_end|>\n")
-    extra = _ids(model, "<|im_start|>assistant\n<think>")
+    # Long enough to go past Gemma's sliding window (512 tokens).
+    system = "You call tools. " * 150
+    base = _ids(model, system + "user\nWhat is 2 + 3?\n")
+    other = _ids(model, system + "user\nReverse 'hello'\n")
+    third = _ids(model, system + "user\nGreet shrek\n")
+    extra = _ids(model, "assistant\n{\"name\": \"")
     sequences = [
         base,                       # cold start
         base + extra[:1],           # one new token
@@ -41,6 +51,9 @@ def test_cached_matches_uncached(model: Small_LLM_Model) -> None:
         base + extra,               # same ids again
         base[:-3],                  # strict prefix of the cache
         other,                      # next prompt, shared start
+        other + extra,              # and its answer
+        third,                      # a prompt that fits the saved copy
+        third + extra[:2],          # appended after a restore
         extra[:1] + other[1:],      # first token differs
         extra[:1],                  # a single token
     ]

@@ -10,24 +10,9 @@ dependencies = [
     "accelerate",
 ]
 
-# One extra per target. cpu pulls the CPU-only build of torch (MKL, no GPU
-# libraries). Each GPU extra pulls the ROCm build of torch for that target
-# plus the matching ROCm runtime (rocm[libraries]) and pre-compiled kernels
-# (rocm[device-...]). Pick exactly one: uv sync --extra gfx1200
-[project.optional-dependencies]
-cpu = ["torch>=2.0.0"]
-gfx1200 = [
-    "torch[device-gfx1200]==2.14.0+rocm10.1.0",
-    "rocm[libraries,device-gfx1200]==10.1.0",
-]
-gfx1034 = [
-    "torch[device-gfx1034]==2.14.0+rocm10.1.0",
-    "rocm[libraries,device-gfx1034]==10.1.0",
-]
-
-# The index itself is declared in the root pyproject.toml.
+# CPU-only torch. The index itself is declared in the root pyproject.toml.
 [tool.uv.sources]
-torch = [{ index = "pytorch-cpu", extra = "cpu" }]
+torch = { index = "pytorch-cpu" }
 
 [build-system]
 requires = ["hatchling"]

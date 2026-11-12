@@ -35,22 +35,31 @@ class FunctionCallResult(BaseModel):
 
 
 class PromptConfig(BaseModel):
-    """Prompt texts and limits used by the constrained decoder."""
+    """Model name, prompt texts and limits used by the constrained decoder.
 
+    ``chat_template`` holds ``{system}`` and ``{user}`` and ends where the
+    assistant's answer starts; ``answer_prefix`` is the fixed start of that
+    answer, up to the function name.
+    """
+
+    model_name: str = "Qwen/Qwen3-0.6B"
     system_prompt: str
     chat_template: str
-    think: bool = True
-    think_prefix: str
-    think_end: str
-    max_think_tokens: int = Field(gt=0)
     max_value_tokens: int = Field(gt=0)
-    force_answer: str
     answer_prefix: str
     parameters_prefix: str
-    temperature: float = Field(gt=0)
-    top_p: float = Field(gt=0, le=1)
-    top_k: int = Field(gt=0)
-    min_p: float = Field(ge=0, le=1)
+
+
+class TokenizerModel(BaseModel):
+    """The ``model`` part of a ``tokenizer.json`` file."""
+
+    vocab: dict[str, int]
+
+
+class TokenizerFile(BaseModel):
+    """The part of a Hugging Face ``tokenizer.json`` the decoder reads."""
+
+    model: TokenizerModel
 
 
 if __name__ == "__main__":

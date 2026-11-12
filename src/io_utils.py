@@ -7,6 +7,7 @@ from .models import (
     FunctionDefinition,
     PromptConfig,
     PromptInput,
+    TokenizerFile,
 )
 from pydantic import TypeAdapter
 from typing import List, TypeVar, Callable
@@ -41,7 +42,12 @@ load_prompts = __generate_read_helper(TypeAdapter(List[PromptInput]))
 write_results = __generate_write_helper(TypeAdapter(List[FunctionCallResult]))
 
 
-load_vocab = __generate_read_helper(TypeAdapter(dict[str, int]))
+__load_tokenizer_file = __generate_read_helper(TypeAdapter(TokenizerFile))
+
+
+def load_tokenizer_vocab(path: Path) -> dict[str, int]:
+    """Return the token-to-id table stored in a ``tokenizer.json`` file."""
+    return __load_tokenizer_file(path).model.vocab
 
 
 load_prompt_config = __generate_read_helper(TypeAdapter(PromptConfig))
