@@ -6,14 +6,8 @@ requires-python = ">=3.10,<3.15"
 dependencies = [
     "numpy",
     "pydantic>=2",
-    "llm-sdk[gfx1200]",
+    "llm-sdk",
 ]
-
-[project.optional-dependencies]
-gfx1200 = [
-    "llm-sdk[gfx1200]",
-]  # RX 9060 XT
-gfx1034 = ["llm-sdk[gfx1034]"]  # RX 6500 (42 computers)
 
 [dependency-groups]
 dev = [
@@ -25,17 +19,15 @@ dev = [
 [tool.uv.sources]
 llm-sdk = { workspace = true }
 
-# uv only reads indexes from the root project. The ROCm wheels (torch, triton,
-# rocm-sdk-*) are on the AMD index, so it is added next to PyPI, and
-# unsafe-best-match lets uv pick across both instead of stopping at the first
-# index that has the name.
-[tool.uv]
-index-strategy = "unsafe-best-match"
-conflicts = [[{ extra = "gfx1200" }, { extra = "gfx1034" }]]
-
+# CPU-only build of torch, from PyTorch's own index (PyPI's Linux wheel pulls
+# several GB of NVIDIA libraries that a CPU run never uses). uv only reads
+# indexes from the root project, so it is declared here and named by
+# llm_sdk's tool.uv.sources. explicit: only torch uses it, it never shadows
+# PyPI.
 [[tool.uv.index]]
-name = "amd-rocm"
-url = "https://stable.repo.amd.com/rocm/whl-next/"
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [tool.uv.workspace]
 members = [
@@ -43,8 +35,9 @@ members = [
 ]
 
 [tool.mypy]
-exclude = ["llm_sdk/", "\\.venv/"]
+exclude = ["llm_sdk/", "moulinette/", "\\.venv/"]
 plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]

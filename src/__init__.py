@@ -4,7 +4,7 @@ from .io_utils import (
     load_functions,
     load_prompt_config,
     load_prompts,
-    load_vocab,
+    load_tokenizer_vocab,
     write_results,
 )
 
@@ -14,5 +14,5 @@ __all__ = [
     "load_prompt_config",
     "load_prompts",
     "write_results",
-    "load_vocab",
+    "load_tokenizer_vocab",
 ]

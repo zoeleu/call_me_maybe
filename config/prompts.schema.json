@@ -1,6 +1,11 @@
 {
-  "description": "Prompt texts and limits used by the constrained decoder.",
+  "description": "Model name, prompt texts and limits used by the constrained decoder.\n\n``chat_template`` holds ``{system}`` and ``{user}`` and ends where the\nassistant's answer starts; ``answer_prefix`` is the fixed start of that\nanswer, up to the function name.",
   "properties": {
+    "model_name": {
+      "default": "Qwen/Qwen3-0.6B",
+      "title": "Model Name",
+      "type": "string"
+    },
     "system_prompt": {
       "title": "System Prompt",
       "type": "string"
@@ -9,32 +14,10 @@
       "title": "Chat Template",
       "type": "string"
     },
-    "think": {
-      "default": true,
-      "title": "Think",
-      "type": "boolean"
-    },
-    "think_prefix": {
-      "title": "Think Prefix",
-      "type": "string"
-    },
-    "think_end": {
-      "title": "Think End",
-      "type": "string"
-    },
-    "max_think_tokens": {
-      "exclusiveMinimum": 0,
-      "title": "Max Think Tokens",
-      "type": "integer"
-    },
     "max_value_tokens": {
       "exclusiveMinimum": 0,
       "title": "Max Value Tokens",
       "type": "integer"
-    },
-    "force_answer": {
-      "title": "Force Answer",
-      "type": "string"
     },
     "answer_prefix": {
       "title": "Answer Prefix",
@@ -43,44 +26,14 @@
     "parameters_prefix": {
       "title": "Parameters Prefix",
       "type": "string"
-    },
-    "temperature": {
-      "exclusiveMinimum": 0,
-      "title": "Temperature",
-      "type": "number"
-    },
-    "top_p": {
-      "exclusiveMinimum": 0,
-      "maximum": 1,
-      "title": "Top P",
-      "type": "number"
-    },
-    "top_k": {
-      "exclusiveMinimum": 0,
-      "title": "Top K",
-      "type": "integer"
-    },
-    "min_p": {
-      "maximum": 1,
-      "minimum": 0,
-      "title": "Min P",
-      "type": "number"
     }
   },
   "required": [
     "system_prompt",
     "chat_template",
-    "think_prefix",
-    "think_end",
-    "max_think_tokens",
     "max_value_tokens",
-    "force_answer",
     "answer_prefix",
-    "parameters_prefix",
-    "temperature",
-    "top_p",
-    "top_k",
-    "min_p"
+    "parameters_prefix"
   ],
   "title": "PromptConfig",
   "type": "object"
