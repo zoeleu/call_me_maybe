@@ -11,7 +11,7 @@ already exists the script stops, so a run can never overwrite another one.
 In it:
 
 * ``<suite>.results.json``: per case the id, prompt, expected call, the
-  call we got (or null), the error (or null), seconds and forward passes;
+  call we got (or null), the error (or null), seconds and logits requests;
 * ``<suite>.function_calls.json``: the project's output format
   (``prompt``, ``name``, ``parameters``), for the real moulinette; a case
   that raised is written with name "" and parameters {};
@@ -100,7 +100,12 @@ def import_project(src_root: Path) -> tuple[ModuleType, ModuleType,
 
 
 class CallCounter:
-    """Counts calls to the model's logits methods (one per forward pass).
+    """Counts calls to the model's logits methods ("logits requests").
+
+    A request is NOT one forward pass: a repeated input is answered
+    from the KV cache without running the model at all, and rebuilding
+    a shared prefix can run two forwards inside one request. Treat the
+    count as a proxy for cost, next to the measured seconds.
 
     The wrapper is stored on the model *instance*, so it hides the class
     method of the same name for this object only.
@@ -184,7 +189,7 @@ def run_suite(suite: Suite, run_dir: Path, limit: int | None,
         results.append({
             "id": case.id, "prompt": case.prompt, "expected": expected,
             "got": got, "error": error, "seconds": round(seconds, 3),
-            "forward_passes": counter.count,
+            "logits_requests": counter.count,
         })
         calls.append({"prompt": case.prompt,
                       "name": got["name"] if got else "",
@@ -195,7 +200,7 @@ def run_suite(suite: Suite, run_dir: Path, limit: int | None,
         status = "ERROR" if error else ("ok" if level is None
                                         else f"wrong ({level})")
         print(f"[{suite.name} {index}/{len(cases)}] {case.id}: {status} "
-              f"{seconds:.2f}s {counter.count} fwd"
+              f"{seconds:.2f}s {counter.count} req"
               + (f" | {error}" if error else ""),
               file=sys.stderr, flush=True)
 

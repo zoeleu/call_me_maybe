@@ -5,7 +5,7 @@ Usage::
     python bench/score.py RUN_DIR [RUN_DIR ...] [--failures]
 
 For each run directory and each ``<suite>.results.json`` in it, prints the
-number of cases, errors, three accuracies, timing and forward passes:
+number of cases, errors, three accuracies, timing and logits requests:
 
 * name accuracy: the function name is right;
 * strict accuracy: name right and parameters exactly equal, *including the
@@ -134,7 +134,10 @@ def suite_stats(results: list[dict[str, Any]]) -> dict[str, float]:
     total = len(results)
     levels = [failure_level(r["expected"], r["got"]) for r in results]
     seconds = [float(r["seconds"]) for r in results]
-    passes = [int(r["forward_passes"]) for r in results]
+    # Runs made before the metric was renamed wrote "forward_passes";
+    # the key was a misnomer (it counted logits requests, not passes).
+    passes = [int(r.get("logits_requests", r.get("forward_passes", 0)))
+              for r in results]
 
     def share(count: int) -> float:
         """Return ``count / total``, or 0 for an empty suite."""
@@ -149,7 +152,7 @@ def suite_stats(results: list[dict[str, Any]]) -> dict[str, float]:
         "strict_acc": share(sum(1 for lv in levels if lv is None)),
         "mean_s": sum(seconds) / total if total else 0.0,
         "total_s": sum(seconds),
-        "mean_fwd": sum(passes) / total if total else 0.0,
+        "mean_req": sum(passes) / total if total else 0.0,
     }
 
 
@@ -165,7 +168,7 @@ def load_run(run_dir: Path) -> dict[str, list[dict[str, Any]]]:
 def format_table(rows: list[tuple[str, str, dict[str, float]]]) -> str:
     """Format ``(suite, run, stats)`` rows as a markdown table."""
     header = ("| suite | run | cases | errors | name | lenient | strict "
-              "| mean s | total s | mean fwd |")
+              "| mean s | total s | mean req |")
     lines = [header, "|" + "---|" * 10]
     for suite, run, stats in rows:
         lines.append(
@@ -173,7 +176,7 @@ def format_table(rows: list[tuple[str, str, dict[str, float]]]) -> str:
             f"| {stats['errors']:.0f} | {stats['name_acc']:.0%} "
             f"| {stats['lenient_acc']:.0%} | {stats['strict_acc']:.0%} "
             f"| {stats['mean_s']:.2f} | {stats['total_s']:.1f} "
-            f"| {stats['mean_fwd']:.0f} |"
+            f"| {stats['mean_req']:.0f} |"
         )
     return "\n".join(lines)
 

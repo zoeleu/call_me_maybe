@@ -446,17 +446,22 @@ optimistic compared with real requests.
 Intel i7-12700 (8 performance cores, 4 efficiency cores), CPU only, model
 loading excluded (it takes about 2 s once the files are in the disk cache).
 
-| Setup | Model | 11 sample prompts | per xLAM case | forward passes per call |
+| Setup | Model | 11 sample prompts | per xLAM case | logits requests per call |
 |---|---|---|---|---|
 | thinking + sampling (before) | Qwen3-0.6B | 198 s | 25.0 s | about 115 to 160 |
 | **greedy, no thinking (default)** | Qwen3-0.6B | 27 s | 3.3 s | about 10 to 14 |
 | greedy, no thinking | Qwen3.5-0.8B | 33 s | 3.5 s | about 10 to 12 |
 | greedy, no thinking | Gemma 3 270M | 7 s | 1.5 s | about 8 to 17 |
 
+- **The last column counts logits requests, not forward passes.** A
+  repeated input is served from the KV cache without a forward pass,
+  and one request can rebuild a shared prefix with two forwards. The
+  counts stay a fair comparison between setups, but they are not
+  forward-pass counts.
 - **Where the time goes:** almost all of it is the model's forward pass,
   about 0.2 s per call on Qwen3-0.6B (profiled: 26 of 29 s inside torch's
   matrix products). The decoder's own Python work is small.
-- **Thinking was the main cost**: about ten times more forward passes per
+- **Thinking was the main cost**: about ten times more logits requests per
   call, for the same accuracy. The subject's limit is 5 minutes; the
   thinking setup used 3 min 18 s of it on the samples, the default 27 s.
 - **The KV cache** makes each step cost one token instead of the whole

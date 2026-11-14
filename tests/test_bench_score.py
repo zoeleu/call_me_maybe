@@ -89,7 +89,7 @@ def test_suite_stats() -> None:
                ) -> dict[str, object]:
         """Build one results entry with fixed timing."""
         return {"expected": expected, "got": got, "error": error,
-                "seconds": 1.0, "forward_passes": 10}
+                "seconds": 1.0, "logits_requests": 10}
 
     stats = suite_stats([
         result({"name": "f", "parameters": {"x": 1.0}}),   # strict
@@ -103,7 +103,7 @@ def test_suite_stats() -> None:
     assert stats["lenient_acc"] == 0.5
     assert stats["strict_acc"] == 0.25
     assert stats["total_s"] == 4.0
-    assert stats["mean_fwd"] == 10
+    assert stats["mean_req"] == 10
 
 
 def test_suite_stats_empty() -> None:
