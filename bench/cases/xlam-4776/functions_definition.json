@@ -1,0 +1,47 @@
+[
+  {
+    "name": "calculate_investment_return",
+    "description": "Calculates the return on investment based on the initial deposit amount, annual interest rate, and investment period.",
+    "parameters": {
+      "initial_amount": {
+        "type": "integer"
+      },
+      "interest_rate": {
+        "type": "number"
+      },
+      "num_years": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "is_perfect_square",
+    "description": "Checks if a number is a perfect square.",
+    "parameters": {
+      "num": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "triangle_area",
+    "description": "Computes the area of a triangle given its base and height.",
+    "parameters": {
+      "base": {
+        "type": "number"
+      },
+      "height": {
+        "type": "number"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

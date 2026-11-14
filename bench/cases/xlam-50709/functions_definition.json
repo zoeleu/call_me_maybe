@@ -1,0 +1,65 @@
+[
+  {
+    "name": "density",
+    "description": "Calculates the density of an object given its mass and volume.",
+    "parameters": {
+      "mass": {
+        "type": "number"
+      },
+      "volume": {
+        "type": "number"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "is_perfect_square",
+    "description": "Checks if a number is a perfect square.",
+    "parameters": {
+      "num": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "calculate_card_game_probability",
+    "description": "Calculate the probability of drawing a certain number of desired cards from a deck.",
+    "parameters": {
+      "total_cards": {
+        "type": "integer"
+      },
+      "desired_cards": {
+        "type": "integer"
+      },
+      "cards_drawn": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "final_velocity",
+    "description": "Calculates the final velocity of an object given its initial velocity, acceleration, and time.",
+    "parameters": {
+      "initial_velocity": {
+        "type": "number"
+      },
+      "acceleration": {
+        "type": "number"
+      },
+      "time": {
+        "type": "number"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

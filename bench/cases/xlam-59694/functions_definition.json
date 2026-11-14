@@ -1,0 +1,14 @@
+[
+  {
+    "name": "getnews",
+    "description": "Retrieves Power BI news articles for a specified page using the Smartable API.",
+    "parameters": {
+      "page": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

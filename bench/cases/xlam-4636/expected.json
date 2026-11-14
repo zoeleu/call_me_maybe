@@ -1,0 +1,8 @@
+{
+  "name": "dice_roll_probability",
+  "parameters": {
+    "target_sum": 10,
+    "num_dice": 3,
+    "num_faces": 8
+  }
+}

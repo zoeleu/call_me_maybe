@@ -1,0 +1,104 @@
+[
+  {
+    "name": "get_host_list_version_hosts_get",
+    "description": "Fetch a list of hosts that ran an EcoIndex analysis, ordered by the number of requests made.",
+    "parameters": {
+      "version": {
+        "type": "string"
+      },
+      "q": {
+        "type": "string"
+      },
+      "date_from": {
+        "type": "string"
+      },
+      "size": {
+        "type": "integer"
+      },
+      "date_to": {
+        "type": "string"
+      },
+      "page": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "sign",
+    "description": "Fetch horoscope information for a given astrological sign using the Horoscope Astrology API.",
+    "parameters": {
+      "s": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "tsv2",
+    "description": "Fetches values from a specified data subset within a dataset using the ODAM RapidAPI.",
+    "parameters": {
+      "subset": {
+        "type": "string"
+      },
+      "dataset": {
+        "type": "string"
+      },
+      "limit": {
+        "type": "integer"
+      },
+      "debug": {
+        "type": "integer"
+      },
+      "format": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "getorderbyid",
+    "description": "Fetches order details given an order ID from the Eric Test Pet API.",
+    "parameters": {
+      "orderid": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "get_quotes_by_genre",
+    "description": "Fetches a list of quotes for a given genre from the Quotsy API.",
+    "parameters": {
+      "name": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "ayah_recitations",
+    "description": "Fetches the list of recitations for a specific Ayah by its key and recitation ID.",
+    "parameters": {
+      "recitation_id": {
+        "type": "integer"
+      },
+      "ayah_key": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

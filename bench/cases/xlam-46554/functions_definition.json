@@ -1,0 +1,14 @@
+[
+  {
+    "name": "redeploy",
+    "description": "Redeploys a Docker instance of the specified phone. This function can be used to reboot the instance if the phone is experiencing unexpected problems.",
+    "parameters": {
+      "phone_id": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

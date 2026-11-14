@@ -1,0 +1,7 @@
+{
+  "name": "trending",
+  "parameters": {
+    "type": "music",
+    "country": "DE"
+  }
+}

@@ -1,1 +1,1 @@
-"""Benchmark tools: build test suites, run the decoder on them, score runs."""
+"""Benchmark tools: build the xLAM cases and grade harness runs."""

@@ -1,0 +1,80 @@
+[
+  {
+    "name": "get_ip_zipcode",
+    "description": "Retrieves the ZIP code of a given IP address using the ip-api.com API.",
+    "parameters": {
+      "ip": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "calculate_calorie_intake",
+    "description": "Calculates the recommended daily calorie intake and macronutrient distribution based on personal characteristics and goals.",
+    "parameters": {
+      "weight_kg": {
+        "type": "number"
+      },
+      "height_cm": {
+        "type": "number"
+      },
+      "age": {
+        "type": "integer"
+      },
+      "sex": {
+        "type": "string"
+      },
+      "activity_level": {
+        "type": "integer"
+      },
+      "goal": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "get_city_from_zipcode",
+    "description": "Retrieves the city name for a given ZIP code using the Ziptastic API.",
+    "parameters": {
+      "zipcode": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "get_ip_location",
+    "description": "Retrieves the latitude and longitude coordinates of a given IP address using the ip-api.com API.",
+    "parameters": {
+      "ip": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "get_holidays_by_year",
+    "description": "Retrieves the list of public holidays for a given year and country using the Nager.Date API.",
+    "parameters": {
+      "year": {
+        "type": "integer"
+      },
+      "country_code": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

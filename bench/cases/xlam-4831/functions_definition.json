@@ -1,0 +1,44 @@
+[
+  {
+    "name": "fibonacci_numbers",
+    "description": "Generates the first n Fibonacci numbers.",
+    "parameters": {
+      "n": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "is_power",
+    "description": "Checks if a number is a power of a given base.",
+    "parameters": {
+      "num": {
+        "type": "integer"
+      },
+      "base": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "binary_addition",
+    "description": "Adds two binary numbers and returns the result as a binary string.",
+    "parameters": {
+      "a": {
+        "type": "string"
+      },
+      "b": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

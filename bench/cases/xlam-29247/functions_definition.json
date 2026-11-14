@@ -1,0 +1,47 @@
+[
+  {
+    "name": "get_holidays_by_year",
+    "description": "Retrieves the list of public holidays for a given year and country using the Nager.Date API.",
+    "parameters": {
+      "year": {
+        "type": "integer"
+      },
+      "country_code": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "get_ip_location",
+    "description": "Retrieves the latitude and longitude coordinates of a given IP address using the ip-api.com API.",
+    "parameters": {
+      "ip": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "analyze_social_group_dynamics",
+    "description": "Analyzes the social dynamics within a group based on the personality traits and group size.",
+    "parameters": {
+      "total": {
+        "type": "integer"
+      },
+      "extroverts": {
+        "type": "integer"
+      },
+      "introverts": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

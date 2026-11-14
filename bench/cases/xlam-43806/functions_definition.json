@@ -1,0 +1,14 @@
+[
+  {
+    "name": "get_stores",
+    "description": "Fetches a list of stores from the \"Get Promo Codes\" API.",
+    "parameters": {
+      "page": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

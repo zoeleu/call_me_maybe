@@ -1,0 +1,8 @@
+{
+  "name": "probability_of_consecutive_rolls",
+  "parameters": {
+    "target_value": 2,
+    "num_rolls": 2,
+    "num_sides": 10
+  }
+}

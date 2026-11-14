@@ -1,0 +1,6 @@
+{
+  "name": "get_charades_word",
+  "parameters": {
+    "difficulty": "hard"
+  }
+}

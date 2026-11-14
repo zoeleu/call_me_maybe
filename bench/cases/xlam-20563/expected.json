@@ -1,0 +1,9 @@
+{
+  "name": "bacterial_growth",
+  "parameters": {
+    "initial_population": 2000,
+    "growth_rate": 0.02,
+    "time": 60.0,
+    "doubling_time": 25.0
+  }
+}

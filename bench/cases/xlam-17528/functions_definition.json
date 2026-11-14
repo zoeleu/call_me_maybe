@@ -1,0 +1,14 @@
+[
+  {
+    "name": "get_charades_word",
+    "description": "Fetch a random charades word with the specified difficulty level using the Toolbench RapidAPI.",
+    "parameters": {
+      "difficulty": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

@@ -1,0 +1,14 @@
+[
+  {
+    "name": "circle_area",
+    "description": "Computes the area of a circle given its radius.",
+    "parameters": {
+      "radius": {
+        "type": "number"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

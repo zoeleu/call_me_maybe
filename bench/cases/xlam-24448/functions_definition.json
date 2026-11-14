@@ -1,0 +1,56 @@
+[
+  {
+    "name": "industry_list",
+    "description": "Gets a list of industries based on the provided alias from the specified API.",
+    "parameters": {
+      "alias": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "specifications_by_year_make_model",
+    "description": "Retrieves motorcycle specifications for a given make, model, and year from the Motorcycle Specs Database.",
+    "parameters": {
+      "make": {
+        "type": "string"
+      },
+      "model": {
+        "type": "string"
+      },
+      "year": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "order_by_descending",
+    "description": "Fetches a list of all dogs sorted in descending order by a specified attribute.",
+    "parameters": {
+      "ordering": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "airplanes_ordered_by_ascending",
+    "description": "Fetches a list of airplanes ordered by a specified attribute in ascending order.",
+    "parameters": {
+      "ordering": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

@@ -1,0 +1,20 @@
+[
+  {
+    "name": "note_duration",
+    "description": "Calculates the duration between two musical notes based on their frequencies and the tempo.",
+    "parameters": {
+      "freq1": {
+        "type": "integer"
+      },
+      "freq2": {
+        "type": "integer"
+      },
+      "bpm": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

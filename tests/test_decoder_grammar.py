@@ -5,7 +5,7 @@ import pytest
 from src.decoder import START, State, _advance
 
 
-@pytest.mark.parametrize("text", [" 23,", " -7,", " 0,"])
+@pytest.mark.parametrize("text", [" 23,", " -7,", " 0,", " -0,"])
 def test_integer_accepts(text: str) -> None:
     """Integers, signed or not, are complete once ``end`` is written."""
     assert _advance("integer", ",", START, text) == ("end", 1)

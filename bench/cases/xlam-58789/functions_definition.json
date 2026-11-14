@@ -1,0 +1,29 @@
+[
+  {
+    "name": "choice_endpoint",
+    "description": "Sends a GET request to the Rock-Paper-Scissors API with the user's choice and returns the API's response.",
+    "parameters": {
+      "choice": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "title_streaming_sources",
+    "description": "Fetches the streaming sources for a given title and provides direct links to watch the title on different platforms. Streaming sources are limited to the USA for free plans.",
+    "parameters": {
+      "is_id": {
+        "type": "string"
+      },
+      "regions": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

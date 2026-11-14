@@ -1,0 +1,74 @@
+[
+  {
+    "name": "calculate_electric_field",
+    "description": "Calculate the electric field produced by a charge at a certain distance.",
+    "parameters": {
+      "charge": {
+        "type": "integer"
+      },
+      "distance": {
+        "type": "integer"
+      },
+      "permitivity": {
+        "type": "number"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "calculate_investment_return",
+    "description": "Calculates the return on investment based on the initial deposit amount, annual interest rate, and investment period.",
+    "parameters": {
+      "initial_amount": {
+        "type": "integer"
+      },
+      "interest_rate": {
+        "type": "number"
+      },
+      "num_years": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "count_bits",
+    "description": "Counts the number of set bits (1's) in the binary representation of a number.",
+    "parameters": {
+      "num": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "is_valid_palindrome",
+    "description": "Checks if a string is a valid palindrome, considering only alphanumeric characters and ignoring case.",
+    "parameters": {
+      "s": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "circle_area",
+    "description": "Computes the area of a circle given its radius.",
+    "parameters": {
+      "radius": {
+        "type": "number"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "name": "calculate_calorie_intake",
+  "parameters": {
+    "weight_kg": 80.0,
+    "height_cm": 180.0,
+    "age": 30,
+    "sex": "male",
+    "activity_level": 3,
+    "goal": "lose"
+  }
+}

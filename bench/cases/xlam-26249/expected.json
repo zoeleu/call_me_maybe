@@ -1,0 +1,8 @@
+{
+  "name": "future_investment_value",
+  "parameters": {
+    "present_value": 10000.0,
+    "annual_interest_rate": 0.03,
+    "years": 10
+  }
+}

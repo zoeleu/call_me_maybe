@@ -1,0 +1,14 @@
+[
+  {
+    "name": "get_a_conversation",
+    "description": "Fetch details of a specific conversation using its ID.",
+    "parameters": {
+      "is_id": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

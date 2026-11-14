@@ -1,0 +1,8 @@
+{
+  "name": "note_duration",
+  "parameters": {
+    "freq1": 554,
+    "freq2": 659,
+    "bpm": 80
+  }
+}

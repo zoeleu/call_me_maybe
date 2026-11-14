@@ -1,0 +1,5 @@
+[
+  {
+    "prompt": "Find the bacterial population after 60 minutes with an initial population of 2000 and a growth rate of 0.02 per minute, considering a doubling time of 25 minutes."
+  }
+]

@@ -1,0 +1,6 @@
+{
+  "name": "circle_area",
+  "parameters": {
+    "radius": 7.5
+  }
+}

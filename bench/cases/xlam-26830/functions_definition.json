@@ -1,0 +1,56 @@
+[
+  {
+    "name": "wire_resistance",
+    "description": "Calculates the resistance of a wire based on its length, cross-sectional area, and material resistivity.",
+    "parameters": {
+      "length_m": {
+        "type": "integer"
+      },
+      "area_sq_m": {
+        "type": "number"
+      },
+      "material": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "monthly_mortgage_payment",
+    "description": "Calculates the monthly mortgage payment based on the loan amount, annual interest rate, and loan term.",
+    "parameters": {
+      "loan_amount": {
+        "type": "number"
+      },
+      "annual_interest_rate": {
+        "type": "number"
+      },
+      "loan_term_years": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "dice_roll_probability",
+    "description": "Calculates the probability of rolling a specific sum with a given number of dice, each having a certain number of faces.",
+    "parameters": {
+      "target_sum": {
+        "type": "integer"
+      },
+      "num_dice": {
+        "type": "integer"
+      },
+      "num_faces": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

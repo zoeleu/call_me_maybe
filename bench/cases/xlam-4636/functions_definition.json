@@ -1,0 +1,38 @@
+[
+  {
+    "name": "dice_roll_probability",
+    "description": "Calculates the probability of rolling a specific sum with a given number of dice, each having a certain number of faces.",
+    "parameters": {
+      "target_sum": {
+        "type": "integer"
+      },
+      "num_dice": {
+        "type": "integer"
+      },
+      "num_faces": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "batting_average",
+    "description": "Calculates the batting average of a baseball player based on the number of hits and at-bats.",
+    "parameters": {
+      "num_hits": {
+        "type": "integer"
+      },
+      "num_at_bats": {
+        "type": "integer"
+      },
+      "precision": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

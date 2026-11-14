@@ -1,0 +1,7 @@
+{
+  "name": "triangle_area",
+  "parameters": {
+    "base": 15.0,
+    "height": 10.0
+  }
+}

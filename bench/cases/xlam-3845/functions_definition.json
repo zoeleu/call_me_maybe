@@ -1,0 +1,41 @@
+[
+  {
+    "name": "mean_confidence_interval",
+    "description": "Calculates the confidence interval for a sample mean.",
+    "parameters": {
+      "std_dev": {
+        "type": "number"
+      },
+      "sample_size": {
+        "type": "integer"
+      },
+      "mean": {
+        "type": "number"
+      },
+      "confidence": {
+        "type": "number"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "probability_of_consecutive_rolls",
+    "description": "Calculates the probability of rolling a specific value on a die consecutively for a given number of rolls.",
+    "parameters": {
+      "target_value": {
+        "type": "integer"
+      },
+      "num_rolls": {
+        "type": "integer"
+      },
+      "num_sides": {
+        "type": "integer"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]

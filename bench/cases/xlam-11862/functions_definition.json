@@ -1,0 +1,38 @@
+[
+  {
+    "name": "main_endpoint",
+    "description": "Fetches product information from the Amazon Pricing and Product Info API using the given ASIN and domain.",
+    "parameters": {
+      "asin": {
+        "type": "string"
+      },
+      "domain": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  },
+  {
+    "name": "auto_complete",
+    "description": "Fetches auto-complete suggestions for a given word using an external API.",
+    "parameters": {
+      "word": {
+        "type": "string"
+      },
+      "currency": {
+        "type": "string"
+      },
+      "country": {
+        "type": "string"
+      },
+      "language": {
+        "type": "string"
+      }
+    },
+    "returns": {
+      "type": "string"
+    }
+  }
+]
