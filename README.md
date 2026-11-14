@@ -576,8 +576,8 @@ The only reference I used directly is Qwen's own documentation:
   settings.
 
 Everything else (sampling methods, BPE, the JSON grammar, ANSI escape codes,
-uv and pydantic details) came from web searches, Wikipedia and AI
-explanations (see below), not from specific sources I can cite.
+uv and pydantic details) came from web searches, documentation, Wikipedia
+and AI explanations (see below), not from specific sources I can cite.
 
 ### Attribution
 
@@ -596,10 +596,10 @@ expected answers are therefore model-generated data, not ground truth.
 
 ### How AI was used
 
-I thoroughly used AI coding agents from numerous providers on this project. The initial project and structure was manually written, and I used agents to do the manual labor work of adapting to Pydantic, fixing logic bugs, diagnosing gaps against the subject, reviewing code, and generating tests.
+I thoroughly used AI coding agents from numerous providers on this project. The initial project and structure was manually written, and I used agents to do the manual labor work of adapting to Pydantic, fixing logic bugs, diagnosing gaps against the subject, reviewing code, generating tests, and explaining concepts.
 
 The design decisions are fully mine, the implementation is manually checked.
 
 All work is reviewed, understood, edited, and only then sent. Some intermediary steps were fully AI-generated, like benchmarks, tests, testing token selection (greedy / Qwen's recommended selection), testing if reasoning helped them do better.
 
-Benchmarking was removed from the project to lower the scope of the project.
+Benchmarking was removed from the project to lower the scope of the project, and token selection and thinking were removed since they made the results worse.
