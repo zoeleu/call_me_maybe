@@ -14,7 +14,7 @@ endif
 UV = uv run
 PYTHON = $(UV) python
 
-.PHONY: install run debug clean lint lint-strict test bench
+.PHONY: install run debug clean lint lint-strict test bench schema
 
 install:
 	uv sync
@@ -36,6 +36,11 @@ bench:
 			|| echo "run failed: $$case"; \
 	done
 	$(PYTHON) bench/grade.py data/output/xlam
+
+# Regenerate config/prompts.schema.json from the PromptConfig model,
+# so prompts.json's "$schema" stays in sync with src/models.py.
+schema:
+	$(PYTHON) -m src.models
 
 debug:
 	$(PYTHON) -m pdb -m src
