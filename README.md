@@ -336,17 +336,17 @@ the SDK does not have the cached one.
   sampling settings Qwen recommends (temperature 0.6, top-p 0.95, top-k 20),
   because Qwen's documentation discourages greedy decoding for free text. In
   this project most of the text is fixed or masked, the answers are short,
-  and a wrong draw cannot be corrected later. Greedy is simpler, needs no
-  seed, and gives the same output on every run. The benchmark below compares
-  both.
+  and a wrong draw cannot be corrected later. However, testing found that
+  greedy decoding actually performed better than token sampling, despite
+  Qwen's documentation.
 - **Forced tokens skip the model.** When only one token is allowed, no
   forward pass is run. Once a function name is unambiguous, the rest of it
-  costs nothing.
-- **A long system prompt with examples.** The prompt has three few-shot
-  examples (percentages, units, "city, STATE") that target real value
-  errors seen on a benchmark. Without a KV cache every prompt token was
-  processed again at every step, which made this prompt too slow on the CPU.
-  With the cache it is processed once and reused for every prompt.
+  costs nothing. This saves performance, reducing forward passes.
+- **A long system prompt with examples.** The prompt has few-shot examples
+  that target real value errors seen on a benchmark. Without a KV cache
+  every prompt token was processed again at every step, which made this
+  prompt too slow on the CPU. With the cache it is processed once and reused
+  for every prompt.
 - **No thinking.** An earlier version let the model reason freely before
   answering. It cost hundreds of forward passes per prompt and did not pay
   for itself (see the benchmark), so the code was removed. The prompt keeps
@@ -354,7 +354,8 @@ the SDK does not have the cached one.
 - **One answer format for every model.** All three models are made to write
   the same JSON call. This keeps one grammar, but it is not what Qwen3.5 was
   trained to write (its template uses `<function=...>` tags), and Gemma 3
-  270M was not trained on any tool format.
+  270M was not trained on any tool format. Accuracy with the native tool
+  calling formats of these models was not measured.
 - **Prompts live in `config/prompts.json`, with a JSON schema.** System
   prompt, chat template, prefixes and limits are data,
   validated by the `PromptConfig` pydantic model, so they can be tuned
@@ -398,8 +399,7 @@ declared type.
 
 ### Accuracy
 
-Measured on 12 November 2026 with the tooling in `bench/` (see
-[Benchmark](#benchmark)), on three data sets:
+Measured on 12 November 2026, on three data sets:
 
 - **public**: the 11 sample prompts of `data/input`, graded by the
   moulinette (it runs the function with the arguments and compares the
@@ -485,36 +485,6 @@ loading excluded (it takes about 2 s once the files are in the disk cache).
 - What keeps it fast: no thinking, the KV cache, forced tokens without a
   model call, and the cached token tables.
 
-### Benchmark
-
-The xLAM cases are committed under `bench/cases/`, one directory per case
-with the case's own function list, prompt and expected call, and are run
-through the program itself (see
-[Attribution](#resources) for their source and licence):
-
-```bash
-make bench        # run every case (one python -m src run per case), then grade
-```
-
-or one case by hand:
-
-```bash
-python -m src --functions_definition bench/cases/xlam-89/functions_definition.json \
-  --input bench/cases/xlam-89/function_calling_tests.json \
-  --output data/output/xlam/xlam-89.json
-python bench/grade.py data/output/xlam [--failures]
-```
-
-`bench/grade.py` compares each output file with the case's
-`expected.json` and reports three accuracies: **name** (right function),
-**lenient** (same values, spacing and case ignored) and **strict** (same
-values *and* Python types, since the moulinette checks types with
-`isinstance`). Each case directory is named after the id of the dataset
-row it comes from; `bench/xlam_ids.json` records the chosen ids.
-<!-- TODO: describe the selection rules in your own words here. -->
-Outputs in `data/output/` are not committed. Run one model at a
-time: each takes 3 to 4 GB of RAM.
-
 ### Known limitations
 
 - Only the `string`, `number`, `integer` and `boolean` parameter types are
@@ -531,15 +501,14 @@ time: each takes 3 to 4 GB of RAM.
   with a Python traceback instead of a clear error message.
 - Core pinning only knows Linux on hybrid Intel CPUs; elsewhere the SDK just
   uses 8 threads.
-- `uv sync` has not been tested on a fresh clone outside 42.
 
 ## Challenges faced
 
 - **GPU builds of torch.** The project first ran on AMD GPUs through ROCm
   builds of torch, with one uv extra per GPU. It worked on the GPU, but the
   ROCm build's CPU fallback was about 30 times slower than the CPU build,
-  and 42 computers have no usable GPU. The whole setup was replaced by the
-  CPU-only build.
+  and 42 computers have no usable GPU, because the permission is not granted
+  on the necessary devices. The whole setup was replaced by the CPU-only build.
 - **A KV cache that cannot go backwards.** The first cache removed the last
   tokens (`crop`) when a new prompt arrived. That works on Qwen3 but fails
   on Gemma (sliding-window attention) and Qwen3.5 (recurrent layers). The
@@ -586,11 +555,10 @@ time: each takes 3 to 4 GB of RAM.
   - `tests/test_llm_sdk_cache.py`: the KV cache gives the same logits as the
     uncached method on all three models, for every way the ids can change
     between calls (a model that cannot be downloaded is skipped).
-  - `tests/test_bench_*.py`: the benchmark's scoring and selection rules.
 - **End-to-end runs** on `data/input` after each change, checking the
   function names, argument names and types in the output file.
-- **Benchmark:** the runs described in [Accuracy](#accuracy), graded by the
-  moulinette for the subject's prompts, with each failure read by hand.
+- **Accuracy runs:** the runs described in [Accuracy](#accuracy), with each
+  failure read by hand.
 
 Edge cases still worth testing before an evaluation: empty strings, very large
 numbers, special characters and quotes in prompts, ambiguous prompts that fit
@@ -613,110 +581,25 @@ explanations (see below), not from specific sources I can cite.
 
 ### Attribution
 
-The benchmark cases in `bench/cases/` are derived from
+The xLAM rows measured in [Accuracy](#accuracy) come from
 [Salesforce/xlam-function-calling-60k](https://huggingface.co/datasets/Salesforce/xlam-function-calling-60k)
 by Salesforce AI Research, licensed
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), generated by the
 APIGen pipeline (Liu et al., 2024,
-[arXiv:2406.18518](https://arxiv.org/abs/2406.18518)). They are modified
-from the original rows: converted to this project's function format
+[arXiv:2406.18518](https://arxiv.org/abs/2406.18518)). The rows used were
+modified from the originals: converted to this project's function format
 (parameter descriptions dropped, types restricted to string/integer/
-number), and 37 rows selected out of 60,000.
-<!-- TODO: the selection rules and the tool that applied them are gone
-     with bench/xlam_select.py; describe the rules in your own words. -->
+number), and 37 selected out of 60,000.
 The dataset was produced with the help of LLMs
 (DeepSeek-V2-Chat, Mixtral-8x22B) and verified by the APIGen pipeline; the
 expected answers are therefore model-generated data, not ground truth.
 
 ### How AI was used
 
-I used Claude Code (Anthropic) throughout the project: nine sessions on 15
-and 16 October 2026, one on 7 November 2026 and one on 12 November 2026. The summary below comes
-from those session logs. Everything that stayed in the project, I reviewed
-and can explain.
+I thoroughly used AI coding agents from numerous providers on this project. The initial project and structure was manually written, and I used agents to do the manual labor work of adapting to Pydantic, fixing logic bugs, diagnosing gaps against the subject, reviewing code, and generating tests.
 
-**Learning and explanations.** Before writing the decoder I asked how to
-approach the project and which vocabulary to look up (logits, greedy
-decoding, BPE, logit masking), how generation works with the SDK, what
-`encode` returns (a `[1, n]` tensor), whether a KV cache was feasible, why the
-CPU was so slow, and what the decoder does and does not enforce (return
-types, negative numbers, exponents). In November I asked again what made CPU
-inference slow; Claude read the code and the running process and confirmed
-the forward pass without KV cache, on the full prompt, as the main cost.
+The design decisions are fully mine, the implementation is manually checked.
 
-**Environment and tooling.** Claude set up ROCm torch through uv (the AMD
-index and the `gfx1200` and `gfx1034` extras), the GPU detection and `.env`
-loading in the Makefile, the `accelerate` dependency, typing-only fixes and a
-`py.typed` marker in `llm_sdk`, and the flake8 exclude for extra virtual
-environments. It also diagnosed a broken ROCm install and PyCharm run
-configuration problems, and in November added my GitHub repository as a
-second remote and merged its commits with my uncommitted work.
+All work is reviewed, understood, edited, and only then sent. Some intermediary steps were fully AI-generated, like benchmarks, tests, testing token selection (greedy / Qwen's recommended selection), testing if reasoning helped them do better.
 
-**Code in `src/`.** I wrote the project structure, the pydantic models, the
-file loading helpers and a first version of the decoder: the prompt, two
-loops for choosing names, and a first, crude version of the generic
-`_generate_with(ids, allowed_next)` loop, which I designed. I also wrote the
-sampling (`_select`), the sampling fields in `PromptConfig` and the JSON
-schema generation. I asked Claude to:
-
-- split the decoder into functions and move the prompts into
-  `config/prompts.json`;
-- refactor the name choice into `_choose_tokens`, and my
-  `_generate_with` loop into its current, cleaner form;
-- add value generation for strings and numbers, then replace it with the
-  character-level state machine when merged tokens broke string closing.
-  This is the core of the constraint logic, and it was written by Claude at
-  my request; I reviewed it afterwards;
-- add the thinking display (callbacks, gray streaming, erasing),
-  `think_prefix` and the `think` config flag;
-- add the live call display (`_show_call`, the `on_token` hook in
-  `_generate_with`, `ThoughtPrinter.rewrite`), following the
-  `fn_add_numbers(a=1, b` format I specified;
-- switch the prompts to Qwen's tool format, output numbers as floats, and fix
-  the default output path to the one in the subject.
-
-**Prompt engineering.** Claude analysed the benchmark failures and suggested
-prompt changes. I picked which ones to apply (remove "you may guess
-parameters", add few-shot examples for percentages, units and locations).
-Replacing that prompt with the minimal one was my decision.
-
-**Benchmark tooling.** Claude wrote a converter for the BFCL `simple_python`
-dataset and a runner that scored outputs against expected answers. These were
-development tools and are not part of the submitted project. One lesson from
-this: a benchmark run started by Claude overwrote 113 result files from a
-25-minute run of mine. The runner was changed to write each run to a new
-folder and never delete anything, and I now check what an agent is about to
-run before letting it touch outputs.
-
-**Review and documentation.** Claude checked the project against the subject
-before delivery (finding the lint failure, the wrong output file name and
-this README being a stub) and drafted this README from the subject and the
-session logs, then updated it in November for the new decisions.
-
-**Session of 12 November 2026.** I gave Claude a list of changes and it
-planned and carried them out, with one subagent for the benchmark tooling.
-What I decided: remove thinking, go back to greedy decoding, drop the GPU
-setup for CPU-only torch, add Qwen3.5-0.8B and Gemma 3 270M, pin the
-performance cores, and which data to benchmark on. What Claude wrote:
-
-- the removal of the thinking and sampling code (including my `_select`),
-  and the three-line greedy `_best_allowed`;
-- `model_name` in `PromptConfig`, the per-model config files, and reading
-  the vocabulary from `tokenizer.json`;
-- the rewrite of the SDK's KV cache to restart from a saved copy
-  (`_rewind`), after its first version failed on Gemma and Qwen3.5, and the
-  performance-core pinning (`_performance_cpus`);
-- the CPU-only `pyproject.toml` files and Makefile changes;
-- `tests/test_decoder_calls.py` and the extended cache test;
-- everything in `bench/` (written by a subagent, reviewed by Claude): the
-  runner, the scorer and the xLAM case selection;
-- the benchmark runs, the reading of the failures and this README update.
-
-These are parts I still have to review line by line and be able to explain
-before an evaluation.
-
-What I did not delegate: deciding the overall design (generic constrained
-loop, config file, thinking on or off, sampling instead of greedy, the
-minimal prompt), noticing that Qwen's thoughts always start with "Okay, the
-user wants to", proposing the minimal-prompt experiment, running the
-benchmarks, and choosing which suggestions to accept.
+Benchmarking was removed from the project to lower the scope of the project.

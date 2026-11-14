@@ -1,8 +1,0 @@
-{
-  "name": "get_products_in_category",
-  "parameters": {
-    "skip": 10,
-    "limit": 10,
-    "category": "Electronics"
-  }
-}

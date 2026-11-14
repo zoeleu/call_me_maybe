@@ -1,6 +1,0 @@
-{
-  "name": "validate_email",
-  "parameters": {
-    "email": "info@example.com"
-  }
-}

@@ -1,7 +1,0 @@
-{
-  "name": "density",
-  "parameters": {
-    "mass": 50.0,
-    "volume": 0.00025
-  }
-}

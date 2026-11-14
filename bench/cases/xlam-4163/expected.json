@@ -1,7 +1,0 @@
-{
-  "name": "get_holidays_by_year",
-  "parameters": {
-    "year": 2023,
-    "country_code": "GB"
-  }
-}

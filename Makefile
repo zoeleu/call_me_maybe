@@ -14,28 +14,13 @@ endif
 UV = uv run
 PYTHON = $(UV) python
 
-.PHONY: install run debug clean lint lint-strict test bench schema
+.PHONY: install run debug clean lint lint-strict test schema
 
 install:
 	uv sync
 
 run:
 	$(if $(wildcard .env),UV_ENV_FILE=.env )$(PYTHON) -m src $(ARGS)
-
-# Run every case in bench/cases/ through the program itself (one run per
-# case: each case has its own function list), then grade the outputs.
-bench:
-	@mkdir -p data/output/xlam
-	@for case_dir in bench/cases/*/; do \
-		case=$$(basename $$case_dir); \
-		echo "== $$case"; \
-		$(if $(wildcard .env),UV_ENV_FILE=.env )$(PYTHON) -m src $(ARGS) \
-			--functions_definition $$case_dir/functions_definition.json \
-			--input $$case_dir/function_calling_tests.json \
-			--output data/output/xlam/$$case.json \
-			|| echo "run failed: $$case"; \
-	done
-	$(PYTHON) bench/grade.py data/output/xlam
 
 # Regenerate config/prompts.schema.json from the PromptConfig model,
 # so prompts.json's "$schema" stays in sync with src/models.py.

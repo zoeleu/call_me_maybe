@@ -1,7 +1,0 @@
-{
-  "name": "potential_energy",
-  "parameters": {
-    "charge": 0.009,
-    "voltage": 20.0
-  }
-}

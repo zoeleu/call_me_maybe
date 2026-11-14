@@ -1,6 +1,0 @@
-{
-  "name": "get_stores",
-  "parameters": {
-    "page": 10
-  }
-}

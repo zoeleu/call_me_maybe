@@ -1,8 +1,0 @@
-{
-  "name": "monthly_mortgage_payment",
-  "parameters": {
-    "loan_amount": 150000.0,
-    "annual_interest_rate": 0.035,
-    "loan_term_years": 20
-  }
-}
