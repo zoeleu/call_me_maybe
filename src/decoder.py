@@ -22,6 +22,10 @@ State = tuple[Phase, int]
 START: State = ("start", 0)
 
 
+class GenerationError(Exception):
+    """Constrained generation could not produce a usable value."""
+
+
 def _string_step(phase: Phase, char: str) -> State | None:
     """Advance a JSON string value by one character."""
     if phase in ("start", "space"):
@@ -271,11 +275,16 @@ class ConstrainedDecoder:
 
         written = self._generate_with(ids, allowed_next, show_value)
         raw = self.model.decode(written)[:-len(end)].strip()
-        if value_type == "string":
-            return str(json.loads(raw))
-        if value_type == "integer":
-            return int(raw)
-        return float(raw)
+        try:
+            if value_type == "string":
+                return str(json.loads(raw))
+            if value_type == "integer":
+                return int(raw)
+            return float(raw)
+        except ValueError as error:
+            raise GenerationError(
+                f"cannot parse generated {value_type} value {raw!r}"
+            ) from error
 
     def _value_table(
         self, value_type: str, end: str, state: State
@@ -342,9 +351,11 @@ class ConstrainedDecoder:
                 if position < len(tokens) and tokens[:position] == written
             }
 
-        return candidates.index(
-            self._generate_with(ids, allowed_next, on_token)
-        )
+        written = self._generate_with(ids, allowed_next, on_token)
+        try:
+            return candidates.index(written)
+        except ValueError as error:
+            raise GenerationError("no complete candidate generated") from error
 
     def _generate_with(
         self,

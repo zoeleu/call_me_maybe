@@ -1,8 +1,9 @@
 """Pydantic models for function definitions, prompts and results."""
 
 from typing import Any
+from string import Formatter
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ParameterSpec(BaseModel):
@@ -18,6 +19,19 @@ class FunctionDefinition(BaseModel):
     description: str
     parameters: dict[str, ParameterSpec]
     returns: ParameterSpec
+
+    @field_validator("parameters")
+    @classmethod
+    def supported_parameters(
+        cls, parameters: dict[str, ParameterSpec],
+    ) -> dict[str, ParameterSpec]:
+        """Reject parameter types the decoder cannot generate."""
+        for name, spec in parameters.items():
+            if spec.type not in ("string", "number", "integer"):
+                raise ValueError(
+                    f"{name}: unsupported parameter type {spec.type!r}"
+                )
+        return parameters
 
 
 class PromptInput(BaseModel):
@@ -48,6 +62,43 @@ class PromptConfig(BaseModel):
     max_value_tokens: int = Field(gt=0)
     answer_prefix: str
     parameters_prefix: str
+
+    @field_validator("chat_template")
+    @classmethod
+    def valid_chat_template(cls, template: str) -> str:
+        """Require a usable template with system and user placeholders."""
+        try:
+            fields = {
+                field for _, field, _, _ in Formatter().parse(template)
+                if field is not None
+            }
+            if fields != {"system", "user"}:
+                raise ValueError("expected {system} and {user} placeholders")
+            template.format(system="", user="")
+        except (ValueError, KeyError, IndexError, AttributeError) as error:
+            raise ValueError(f"invalid chat_template: {error}") from error
+        return template
+
+
+class PipelineInputs(BaseModel):
+    """Validated inputs required before model initialization."""
+
+    functions: list[FunctionDefinition] = Field(min_length=1)
+    config: PromptConfig
+    prompts: list[PromptInput]
+
+    @field_validator("functions")
+    @classmethod
+    def unique_functions(
+        cls, functions: list[FunctionDefinition],
+    ) -> list[FunctionDefinition]:
+        """Prevent duplicate names from silently overwriting functions."""
+        names: set[str] = set()
+        for function in functions:
+            if function.name in names:
+                raise ValueError(f"duplicate function name: {function.name!r}")
+            names.add(function.name)
+        return functions
 
 
 class TokenizerModel(BaseModel):

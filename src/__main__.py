@@ -5,10 +5,29 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Callable, TypeVar
+
+from pydantic import ValidationError
 import src
 import llm_sdk
 from src import load_prompts, write_results
-from src.models import FunctionCallResult
+from src.models import FunctionCallResult, PipelineInputs, PromptInput
+from src.decoder import GenerationError
+
+T = TypeVar("T")
+
+
+class CLIError(Exception):
+    """An expected pipeline failure with a user-facing message."""
+
+
+def read_input(path: Path, loader: Callable[[Path], T]) -> T:
+    """Load a validated input and attach its path to expected failures."""
+    try:
+        return loader(path)
+    except (OSError, UnicodeError, ValidationError) as error:
+        raise CLIError(f"invalid input: {path}: {error}") from error
+
 
 # ANSI escape codes: gray ("bright black") text, then back to normal.
 GRAY = "\033[90m"
@@ -92,37 +111,73 @@ def format_result(result: FunctionCallResult) -> str:
     return f"{result.name}({arguments})"
 
 
-def main() -> int:
-    """Run the pipeline; return a process exit code."""
-    args = parse_args(sys.argv[1:])
-    functions = src.load_functions(args.functions_definition)
-    config = src.load_prompt_config(args.prompts_config)
-    model = llm_sdk.Small_LLM_Model(config.model_name)
-    printer = CallPrinter() if sys.stderr.isatty() else None
-    decoder = src.ConstrainedDecoder(
-        model=model,
-        functions=functions,
-        config=config,
-        on_call_update=printer.rewrite if printer else None,
-        on_call_done=printer.clear if printer else None,
+def load_inputs(args: argparse.Namespace) -> PipelineInputs:
+    """Read and validate every input before loading the model."""
+    return PipelineInputs(
+        functions=read_input(args.functions_definition, src.load_functions),
+        config=read_input(args.prompts_config, src.load_prompt_config),
+        prompts=read_input(args.input, load_prompts),
     )
-    input_file = args.input
-    output_file = args.output
 
-    input_parsed = [p.prompt for p in load_prompts(Path(input_file))]
-    output: list[FunctionCallResult] = []
+
+def create_decoder(
+    inputs: PipelineInputs, printer: CallPrinter | None,
+) -> src.ConstrainedDecoder:
+    """Initialize the model and decoder with contextual failure reporting."""
     try:
-        for prompt in input_parsed:
-            result = decoder.generate_call(
-                prompt=prompt
-            )
-            output.append(result)
-            print(format_result(result), file=sys.stderr, flush=True)
+        model = llm_sdk.Small_LLM_Model(inputs.config.model_name)
+        return src.ConstrainedDecoder(
+            model=model,
+            functions=inputs.functions,
+            config=inputs.config,
+            on_call_update=printer.rewrite if printer else None,
+            on_call_done=printer.clear if printer else None,
+        )
+    except (OSError, ValueError, RuntimeError) as error:
+        raise CLIError(f"model initialization failed: {error}") from error
+
+
+def generate_results(
+    decoder: src.ConstrainedDecoder, prompts: list[PromptInput],
+) -> list[FunctionCallResult]:
+    """Generate a complete batch, stopping at the first expected failure."""
+    output: list[FunctionCallResult] = []
+    for index, prompt in enumerate(prompts, start=1):
+        try:
+            result = decoder.generate_call(prompt=prompt.prompt)
+        except (GenerationError, OSError, RuntimeError) as error:
+            raise CLIError(
+                f"generation failed for prompt {index}: {error}"
+            ) from error
+        output.append(result)
+        print(format_result(result), file=sys.stderr, flush=True)
+    return output
+
+
+def run(args: argparse.Namespace) -> None:
+    """Run each pipeline stage; write only a successfully generated batch."""
+    inputs = load_inputs(args)
+    printer = CallPrinter() if sys.stderr.isatty() else None
+    try:
+        decoder = create_decoder(inputs, printer)
+        output = generate_results(decoder, inputs.prompts)
     finally:
-        # Also erase the gray line if generation crashes or is interrupted.
         if printer:
             printer.clear()
-    write_results(output_file, output)
+    try:
+        write_results(args.output, output)
+    except (OSError, ValueError) as error:
+        raise CLIError(f"cannot write {args.output}: {error}") from error
+
+
+def main() -> int:
+    """Translate expected pipeline failures into a message and exit status."""
+    args = parse_args(sys.argv[1:])
+    try:
+        run(args)
+    except (CLIError, ValidationError, OSError) as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
     return 0
 
 
