@@ -35,27 +35,49 @@ CONFIG = PromptConfig(
 
 
 class FakeModel:
-    """Stands in for ``Small_LLM_Model``; wants to write ``self.target``."""
+    """Stands in for ``Small_LLM_Model``; wants to write ``self.target``.
+
+    Attributes:
+        target: Desired answer text following the configured answer prefix.
+    """
 
     def __init__(self) -> None:
-        """Load the tokenizer and the text of every token."""
+        """Load the tokenizer and initialize an empty token-text cache."""
         self._tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
         self.target = ""
         self._texts: dict[int, str] = {}
 
     def encode(self, text: str) -> list[list[int]]:
-        """Tokenize ``text`` as a batch of one, like the SDK."""
+        """Tokenize ``text`` as a batch of one, like the SDK.
+
+        Args:
+            text: Text to tokenize without adding special tokens.
+
+        Returns:
+            Token IDs wrapped in a single-item batch.
+        """
         ids: list[int] = self._tokenizer.encode(
             text, add_special_tokens=False
         )
         return [ids]
 
     def decode(self, ids: list[int]) -> str:
-        """Turn token ids back into text."""
+        """Turn token ids back into text.
+
+        Args:
+            ids: Token IDs to decode, skipping special tokens.
+
+        Returns:
+            Decoded text.
+        """
         return str(self._tokenizer.decode(ids, skip_special_tokens=True))
 
     def get_path_to_tokenizer_file(self) -> str:
-        """Return the path of the tokenizer.json file."""
+        """Return the path of the tokenizer.json file.
+
+        Returns:
+            Local path to the downloaded tokenizer JSON file.
+        """
         return str(hf_hub_download(MODEL_NAME, "tokenizer.json"))
 
     def get_logits_from_input_ids(self, input_ids: list[int]) -> list[float]:
@@ -64,6 +86,15 @@ class FakeModel:
         The answer written so far is the text after ``answer_prefix``. A
         token that continues the target scores its length (so the longest
         one wins); any other token scores -1.
+
+        Args:
+            input_ids: Prompt and answer token IDs generated so far.
+
+        Returns:
+            One score per vocabulary token, favoring target continuations.
+
+        Raises:
+            AssertionError: If the generated answer diverges from the target.
         """
         if not self._texts:
             self._texts = {
@@ -82,7 +113,11 @@ class FakeModel:
 
 @pytest.fixture(scope="module")
 def fake() -> FakeModel:
-    """Build the fake model once for every test in this file."""
+    """Build the fake model once for every test in this file.
+
+    Returns:
+        Fake model shared by the tests in this module.
+    """
     return FakeModel()
 
 
@@ -93,6 +128,18 @@ def _call(
 
     ``types`` maps each parameter name to its type; ``arguments`` is the
     text the fake model wants between the braces of ``"arguments"``.
+
+    Args:
+        fake: Model whose target answer is set for this call.
+        types: Parameter names mapped to their declared schema types.
+        arguments: JSON members to generate inside the arguments object.
+
+    Returns:
+        Parsed parameters from the generated call.
+
+    Raises:
+        AssertionError: If generation diverges or selects another function.
+        GenerationError: If the decoder cannot produce a valid call.
     """
     function = FunctionDefinition(
         name="fn",
@@ -116,7 +163,13 @@ def _call(
 
 @pytest.mark.parametrize("text, value", [("4", 4), ("-12", -12), ("0", 0)])
 def test_integer_stays_int(fake: FakeModel, text: str, value: int) -> None:
-    """An ``integer`` parameter comes out as a Python int."""
+    """An ``integer`` parameter comes out as a Python int.
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
+        text: JSON literal the fake model should generate.
+        value: Expected Python value after decoding.
+    """
     parameters = _call(fake, {"n": "integer"}, f'"n": {text}')
     assert parameters == {"n": value}
     assert type(parameters["n"]) is int
@@ -128,7 +181,13 @@ def test_integer_stays_int(fake: FakeModel, text: str, value: int) -> None:
 def test_number_becomes_float(
     fake: FakeModel, text: str, value: float
 ) -> None:
-    """A ``number`` parameter is a float even when written without a dot."""
+    """A ``number`` parameter is a float even when written without a dot.
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
+        text: JSON literal the fake model should generate.
+        value: Expected Python value after decoding.
+    """
     parameters = _call(fake, {"a": "number"}, f'"a": {text}')
     assert parameters == {"a": value}
     assert type(parameters["a"]) is float
@@ -138,14 +197,24 @@ def test_number_becomes_float(
 def test_boolean_becomes_bool(
     fake: FakeModel, text: str, value: bool,
 ) -> None:
-    """A ``boolean`` parameter comes out as a Python bool."""
+    """A ``boolean`` parameter comes out as a Python bool.
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
+        text: JSON literal the fake model should generate.
+        value: Expected Python value after decoding.
+    """
     parameters = _call(fake, {"flag": "boolean"}, f'"flag": {text}')
     assert parameters == {"flag": value}
     assert type(parameters["flag"]) is bool
 
 
 def test_mixed_types_in_any_order(fake: FakeModel) -> None:
-    """The model picks the parameter order; every type is parsed right."""
+    """The model picks the parameter order; every type is parsed right.
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
+    """
     parameters = _call(
         fake,
         {"principal": "number", "rate": "number",
@@ -164,7 +233,12 @@ def test_mixed_types_in_any_order(fake: FakeModel) -> None:
     ["hello", 'Say "hello" to {name}', "C:\\Users\\john", "a, b}} c", "\\d+"],
 )
 def test_string_round_trip(fake: FakeModel, value: str) -> None:
-    """Quotes, backslashes, commas and braces survive inside a string."""
+    """Quotes, backslashes, commas and braces survive inside a string.
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
+        value: Expected Python value after decoding.
+    """
     parameters = _call(fake, {"s": "string"}, f'"s": {json.dumps(value)}')
     assert parameters == {"s": value}
 
@@ -174,6 +248,9 @@ def test_boolean_spans_tokens(fake: FakeModel) -> None:
 
     After every prefix of either word, at least one token must keep the
     value going, and the finished word must be closeable in one token.
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
     """
     decoder = ConstrainedDecoder(
         model=cast(Small_LLM_Model, fake),
@@ -196,7 +273,11 @@ def test_boolean_spans_tokens(fake: FakeModel) -> None:
 
 
 def test_integer_cannot_take_a_fraction(fake: FakeModel) -> None:
-    """A model that wants ``4.5`` for an integer is stopped at the dot."""
+    """A model that wants ``4.5`` for an integer is stopped at the dot.
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
+    """
     with pytest.raises(AssertionError):
         _call(fake, {"n": "integer"}, '"n": 4.5')
 
@@ -220,7 +301,11 @@ def test_number_overflow_boundary() -> None:
 
 @pytest.mark.parametrize("value_type", ["integer", "number"])
 def test_schema_keeps_bools_out_of_numbers(value_type: str) -> None:
-    """``bool`` is a subclass of ``int``; it must not pass as a number."""
+    """``bool`` is a subclass of ``int``; it must not pass as a number.
+
+    Args:
+        value_type: Numeric schema type that must reject boolean values.
+    """
     with pytest.raises(GenerationError):
         _check_schema("a", True, value_type)
 
@@ -231,6 +316,9 @@ def test_number_overflow_fails_the_call(fake: FakeModel) -> None:
     Reproduction of the reported bug: with ``max_value_tokens=400`` the
     model may write hundreds of digits; parsing them gave ``inf`` and the
     result JSON had ``null`` instead of a number.
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
     """
     config = CONFIG.model_copy(update={"max_value_tokens": 420})
     function = FunctionDefinition(
@@ -263,6 +351,11 @@ def test_empty_string_round_trip(
 
     As the last value it must be closed by the ``}}`` token, as a
     middle value by the ``,`` token; both have no characters to strip.
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
+        types: Parameter names mapped to their declared schema types.
+        arguments: JSON members the fake model should generate as arguments.
     """
     parameters = _call(fake, types, arguments)
     assert parameters["s"] == ""
@@ -276,6 +369,9 @@ def test_huge_integer_is_truncated_but_valid(fake: FakeModel) -> None:
     digits and one on the forced closing ``}}``. The value stays a
     valid int; a huge ``number`` instead fails past float64 (see the
     overflow tests above).
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
     """
     config = CONFIG.model_copy(update={"max_value_tokens": 16})
     function = FunctionDefinition(
@@ -301,6 +397,9 @@ def test_many_parameters(fake: FakeModel) -> None:
 
     Exercises the ``end`` switching between ``,`` and ``}}`` several
     times, and the space before every value but the first.
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
     """
     parameters = _call(
         fake,
@@ -324,6 +423,9 @@ def test_zero_parameters(fake: FakeModel) -> None:
     No value is generated, so the closing ``}}`` of the shown JSON is
     never forced; the decoder builds its result by itself, and the
     tokens it generated are display-only.
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
     """
     decoder = ConstrainedDecoder(
         model=cast(Small_LLM_Model, fake),
@@ -356,6 +458,10 @@ def test_prompt_with_special_characters(
 
     The prompt is a format *value*, never a template: a placeholder
     typed by the user, such as ``{system}``, must not be substituted.
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
+        prompt: User prompt whose special characters must remain unchanged.
     """
     decoder = ConstrainedDecoder(
         model=cast(Small_LLM_Model, fake),
@@ -388,6 +494,12 @@ def test_ambiguous_choice_keeps_the_chosen_schema(
     They even share the parameter name with different declared types:
     whichever function the model prefers, its own schema is enforced
     and the other's is ignored.
+
+    Args:
+        fake: Fake model used to drive constrained decoding.
+        name: Function name the fake model should select.
+        arguments: JSON members the fake model should generate as arguments.
+        expected: Expected parameters for the selected function.
     """
     functions = [
         FunctionDefinition(

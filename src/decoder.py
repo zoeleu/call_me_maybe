@@ -328,12 +328,25 @@ class ConstrainedDecoder:
         done: State = ("end", len(end))
 
         def state_after(written: list[int]) -> State:
+            """Replay value tokens to determine the current parser state.
+
+            Args:
+                written: Valid value tokens generated so far.
+
+            Returns:
+                Parser state after consuming every supplied token.
+            """
             state = START
             for token in written:
                 state = self._value_table(value_type, end, state)[token]
             return state
 
         def show_value(written: list[int]) -> None:
+            """Send the partial value to the optional display callback.
+
+            Args:
+                written: Value tokens, possibly including the delimiter.
+            """
             if show is None:
                 return
             text = self.model.decode(written)
@@ -343,6 +356,16 @@ class ConstrainedDecoder:
             show(text.strip())
 
         def allowed_next(written: list[int]) -> set[int]:
+            """Find valid continuations, favoring closure at the token limit.
+
+            Args:
+                written: Valid value tokens generated so far.
+
+            Returns:
+                Allowed token IDs, or an empty set for a completed value.
+                At the token limit, only closing tokens are returned when
+                available; otherwise all valid continuations remain allowed.
+            """
             state = state_after(written)
             if state == done:
                 return set()
@@ -390,6 +413,11 @@ class ConstrainedDecoder:
         """
 
         def show_candidate(written: list[int]) -> None:
+            """Display the partial candidate without surrounding characters.
+
+            Args:
+                written: Candidate tokens generated so far.
+            """
             if show is not None:
                 show(self.model.decode(written).strip(before + after))
 
@@ -416,6 +444,15 @@ class ConstrainedDecoder:
             raise ValueError("no candidates to choose from")
 
         def allowed_next(written: list[int]) -> set[int]:
+            """Find next tokens of candidates matching the current prefix.
+
+            Args:
+                written: Candidate token prefix generated so far.
+
+            Returns:
+                Next token IDs from matching, unfinished candidates, or an
+                empty set when none can continue.
+            """
             position = len(written)
             return {
                 tokens[position]
