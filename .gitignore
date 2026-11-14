@@ -12,7 +12,7 @@ data/output/
 .idea/
 .vscode/
 output.txt
-subject.pdf
+*subject.pdf
 *sheet.pdf
 # benchmark data (gated dataset rows) and run outputs
 bench/data/
