@@ -497,8 +497,9 @@ loading excluded (it takes about 2 s once the files are in the disk cache).
   to leave out an optional one.
 - The function format has no parameter descriptions, so the model only sees
   each parameter's name and type.
-- Missing or invalid input files are not yet caught in `main`, so they end
-  with a Python traceback instead of a clear error message.
+- Missing files, malformed JSON, invalid encodings and validation failures
+  are caught before model loading. The program prints an error identifying
+  the input file to stderr and exits with status 1 instead of a traceback.
 - Core pinning only knows Linux on hybrid Intel CPUs; elsewhere the SDK just
   uses 8 threads.
 
