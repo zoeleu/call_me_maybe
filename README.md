@@ -488,8 +488,9 @@ at a time: each takes 3 to 4 GB of RAM.
 
 ### Known limitations
 
-- Only the `string`, `number` and `integer` parameter types are supported.
-  Any other type (for example `boolean` or an array) raises an error.
+- Only the `string`, `number`, `integer` and `boolean` parameter types are
+  supported. Any other type (for example an array) raises an error before
+  the model is loaded.
 - Numbers cannot use exponent notation (`1e-9`), so the model has to write
   them out in full. Leading zeros (`007`) are accepted and parsed as `7`.
 - `\uXXXX` escapes are not supported inside strings.

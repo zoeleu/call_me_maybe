@@ -71,7 +71,7 @@ def test_semantic_validation_precedes_model(
     elif case == "duplicate":
         functions *= 2
     elif case == "type":
-        functions[0]["parameters"]["name"]["type"] = "boolean"
+        functions[0]["parameters"]["name"]["type"] = "array"
     else:
         config_path = inputs / "config.json"
         config = json.loads(config_path.read_text())

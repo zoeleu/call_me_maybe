@@ -7,7 +7,12 @@ from typing import Any, Callable, Literal
 from llm_sdk import Small_LLM_Model
 
 from .io_utils import load_tokenizer_vocab
-from .models import FunctionCallResult, FunctionDefinition, PromptConfig
+from .models import (
+    SUPPORTED_PARAMETER_TYPES,
+    FunctionCallResult,
+    FunctionDefinition,
+    PromptConfig,
+)
 
 DIGITS = "0123456789"
 JSON_ESCAPABLE = '"\\/bfnrt'
@@ -16,7 +21,7 @@ JSON_ESCAPABLE = '"\\/bfnrt'
 # of ``end`` were matched (only used by the "end" phase).
 Phase = Literal[
     "start", "space", "string", "escape",
-    "sign", "int", "period", "fraction", "end",
+    "sign", "int", "period", "fraction", "true", "false", "end",
 ]
 State = tuple[Phase, int]
 START: State = ("start", 0)
@@ -39,6 +44,29 @@ def _string_step(phase: Phase, char: str) -> State | None:
     if ord(char) < 0x20:
         return None
     return ("string", 0)
+
+
+def _boolean_step(
+    phase: Phase, matched: int, char: str, end: str
+) -> State | None:
+    """Advance a boolean value (``true`` or ``false``) by one character.
+
+    The phase is the word being spelled, and ``matched`` counts how many
+    of its letters are already written; once the word is complete, only
+    ``end`` may come.
+    """
+    if phase in ("start", "space"):
+        if char == "t":
+            return ("true", 1)
+        if char == "f":
+            return ("false", 1)
+        return None
+    if phase in ("true", "false"):
+        if matched == len(phase):
+            return ("end", 1) if char == end[0] else None
+        if char == phase[matched]:
+            return (phase, matched + 1)
+    return None
 
 
 def _number_step(phase: Phase, char: str, end: str) -> State | None:
@@ -76,6 +104,8 @@ def _value_step(
         return None
     if value_type == "string":
         return _string_step(phase, char)
+    if value_type == "boolean":
+        return _boolean_step(phase, matched, char, end)
     # An integer is a number that never reaches its fraction part.
     if value_type == "integer" and char == ".":
         return None
@@ -232,7 +262,7 @@ class ConstrainedDecoder:
         value_type: str,
         end: str,
         show: Callable[[str], None] | None = None,
-    ) -> str | float | int:
+    ) -> str | float | int | bool:
         """Force the model to write `` <value><end>``; return the value.
 
         Tokens are checked by their text, character by character, so the
@@ -242,7 +272,7 @@ class ConstrainedDecoder:
         ``show``, if given, receives the value written so far after each
         token, without the space before it or ``end``.
         """
-        if value_type not in ("string", "number", "integer"):
+        if value_type not in SUPPORTED_PARAMETER_TYPES:
             raise ValueError(f"unsupported parameter type {value_type!r}")
         done: State = ("end", len(end))
 
@@ -280,8 +310,10 @@ class ConstrainedDecoder:
                 return str(json.loads(raw))
             if value_type == "integer":
                 return int(raw)
+            if value_type == "boolean":
+                return {"true": True, "false": False}[raw]
             return float(raw)
-        except ValueError as error:
+        except (ValueError, KeyError) as error:
             raise GenerationError(
                 f"cannot parse generated {value_type} value {raw!r}"
             ) from error

@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.decoder import START, _advance
+from src.decoder import START, State, _advance
 
 
 @pytest.mark.parametrize("text", [" 23,", " -7,", " 0,"])
@@ -20,6 +20,35 @@ def test_integer_accepts_closing_end() -> None:
 def test_integer_rejects(text: str) -> None:
     """A period, a lone sign, an empty value or a quote is not an integer."""
     assert _advance("integer", ",", START, text) is None
+
+
+@pytest.mark.parametrize("text", [" true,", " false,"])
+def test_boolean_accepts(text: str) -> None:
+    """Both booleans, spelled out, are complete once ``end`` is written."""
+    assert _advance("boolean", ",", START, text) == ("end", 1)
+
+
+def test_boolean_accepts_closing_end() -> None:
+    """The last boolean closes the call with ``}}``."""
+    assert _advance("boolean", "}}", START, " true}}") == ("end", 2)
+
+
+@pytest.mark.parametrize(
+    "text", [" True,", " 1,", " tru,", " truex,", ' "true"', " true "]
+)
+def test_boolean_rejects(text: str) -> None:
+    """Capitalized, numeric, partial or overlong words are not booleans."""
+    assert _advance("boolean", ",", START, text) is None
+
+
+@pytest.mark.parametrize(
+    "text, state",
+    [(" t", ("true", 1)), (" tru", ("true", 3)),
+     (" f", ("false", 1)), (" fals", ("false", 4))],
+)
+def test_boolean_partial(text: str, state: State) -> None:
+    """A boolean split anywhere still has a valid mid-word state."""
+    assert _advance("boolean", ",", START, text) == state
 
 
 def test_integer_partial() -> None:

@@ -14,7 +14,7 @@ from huggingface_hub import hf_hub_download
 from llm_sdk import Small_LLM_Model
 from transformers import AutoTokenizer
 
-from src.decoder import ConstrainedDecoder
+from src.decoder import ConstrainedDecoder, State
 from src.models import FunctionDefinition, ParameterSpec, PromptConfig
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
@@ -128,15 +128,29 @@ def test_number_becomes_float(
     assert type(parameters["a"]) is float
 
 
+@pytest.mark.parametrize("text, value", [("true", True), ("false", False)])
+def test_boolean_becomes_bool(
+    fake: FakeModel, text: str, value: bool,
+) -> None:
+    """A ``boolean`` parameter comes out as a Python bool."""
+    parameters = _call(fake, {"flag": "boolean"}, f'"flag": {text}')
+    assert parameters == {"flag": value}
+    assert type(parameters["flag"]) is bool
+
+
 def test_mixed_types_in_any_order(fake: FakeModel) -> None:
     """The model picks the parameter order; every type is parsed right."""
     parameters = _call(
         fake,
-        {"principal": "number", "rate": "number", "years": "integer"},
-        '"years": 23, "principal": 1000, "rate": 0.0375',
+        {"principal": "number", "rate": "number",
+         "years": "integer", "verified": "boolean"},
+        '"years": 23, "verified": true, "principal": 1000, "rate": 0.0375',
     )
-    assert parameters == {"years": 23, "principal": 1000.0, "rate": 0.0375}
+    assert parameters == {
+        "years": 23, "verified": True, "principal": 1000.0, "rate": 0.0375,
+    }
     assert type(parameters["years"]) is int
+    assert type(parameters["verified"]) is bool
 
 
 @pytest.mark.parametrize(
@@ -147,6 +161,32 @@ def test_string_round_trip(fake: FakeModel, value: str) -> None:
     """Quotes, backslashes, commas and braces survive inside a string."""
     parameters = _call(fake, {"s": "string"}, f'"s": {json.dumps(value)}')
     assert parameters == {"s": value}
+
+
+def test_boolean_spans_tokens(fake: FakeModel) -> None:
+    """``true`` and ``false`` survive being split across tokens.
+
+    After every prefix of either word, at least one token must keep the
+    value going, and the finished word must be closeable in one token.
+    """
+    decoder = ConstrainedDecoder(
+        model=cast(Small_LLM_Model, fake),
+        functions=[FunctionDefinition(
+            name="fn", description="A test function.",
+            parameters={"flag": ParameterSpec(type="boolean")},
+            returns=ParameterSpec(type="string"),
+        )],
+        config=CONFIG,
+    )
+    for word in ("true", "false"):
+        for matched in range(len(word) + 1):
+            state: State = ("space", 0) if not matched else (word, matched)
+            table = decoder._value_table("boolean", ",", state)
+            assert table, f"no token continues {word[:matched]!r}"
+            if matched == len(word):
+                assert ("end", 1) in table.values(), (
+                    f"{word!r} cannot be closed after a token split"
+                )
 
 
 def test_integer_cannot_take_a_fraction(fake: FakeModel) -> None:

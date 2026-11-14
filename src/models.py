@@ -5,6 +5,12 @@ from string import Formatter
 
 from pydantic import BaseModel, Field, field_validator
 
+# Parameter types the constrained decoder can generate a value for.
+# The decoder reads this too, so the two can never disagree.
+SUPPORTED_PARAMETER_TYPES: tuple[str, ...] = (
+    "string", "number", "integer", "boolean",
+)
+
 
 class ParameterSpec(BaseModel):
     """Type description of a single function parameter or return value."""
@@ -27,7 +33,7 @@ class FunctionDefinition(BaseModel):
     ) -> dict[str, ParameterSpec]:
         """Reject parameter types the decoder cannot generate."""
         for name, spec in parameters.items():
-            if spec.type not in ("string", "number", "integer"):
+            if spec.type not in SUPPORTED_PARAMETER_TYPES:
                 raise ValueError(
                     f"{name}: unsupported parameter type {spec.type!r}"
                 )
