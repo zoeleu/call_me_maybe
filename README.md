@@ -551,7 +551,13 @@ loading excluded (it takes about 2 s once the files are in the disk cache).
   - `tests/test_decoder_calls.py`: whole calls with a fake model that uses
     the real Qwen tokenizer and always prefers the tokens of a target call.
     It checks that integers stay `int`, numbers become `float`, and strings
-    with quotes, backslashes, commas and `}}` come back unchanged.
+    with quotes, backslashes, commas and `}}` come back unchanged. It also
+    covers the edge cases listed below: empty strings, a huge integer
+    (truncated by `max_value_tokens` into a valid, smaller int), prompts
+    with quotes, braces or newlines, functions with zero and with eight
+    parameters, and an ambiguous prompt fit by two functions that share a
+    parameter name with different types (the chosen function's schema is
+    the one enforced).
   - `tests/test_llm_sdk_cache.py`: the KV cache gives the same logits as the
     uncached method on all three models, for every way the ids can change
     between calls (a model that cannot be downloaded is skipped).
@@ -560,10 +566,13 @@ loading excluded (it takes about 2 s once the files are in the disk cache).
 - **Accuracy runs:** the runs described in [Accuracy](#accuracy), with each
   failure read by hand.
 
-Edge cases still worth testing before an evaluation: empty strings, very large
-numbers, special characters and quotes in prompts, ambiguous prompts that fit
-two functions, functions with many or zero parameters, string values that
-contain `,` or `}}`, and missing or malformed input files.
+Those edge cases are now covered by the unit tests above: empty strings,
+very large numbers, special characters and quotes in prompts, ambiguous
+prompts that fit two functions, functions with many or zero parameters,
+string values that contain `,` or `}}`, and missing or malformed input
+files. One thing unit tests cannot show is which function the *real*
+model prefers when a prompt fits two of them; only the end-to-end and
+accuracy runs above can, prompt by prompt.
 
 ## Resources
 

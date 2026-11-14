@@ -247,3 +247,166 @@ def test_number_overflow_fails_the_call(fake: FakeModel) -> None:
     )
     with pytest.raises(GenerationError):
         decoder.generate_call("a prompt")
+
+
+@pytest.mark.parametrize(
+    "types, arguments",
+    [
+        ({"s": "string"}, '"s": ""'),
+        ({"n": "integer", "s": "string"}, '"n": 5, "s": ""'),
+    ],
+)
+def test_empty_string_round_trip(
+    fake: FakeModel, types: dict[str, str], arguments: str,
+) -> None:
+    """An empty string is a complete value, whether it ends the call.
+
+    As the last value it must be closed by the ``}}`` token, as a
+    middle value by the ``,`` token; both have no characters to strip.
+    """
+    parameters = _call(fake, types, arguments)
+    assert parameters["s"] == ""
+
+
+def test_huge_integer_is_truncated_but_valid(fake: FakeModel) -> None:
+    """An integer longer than the token budget is cut, not broken.
+
+    ``max_value_tokens`` counts value tokens: with 16, this vocab
+    spends one on the leading space (there is no " 9" token), 15 on
+    digits and one on the forced closing ``}}``. The value stays a
+    valid int; a huge ``number`` instead fails past float64 (see the
+    overflow tests above).
+    """
+    config = CONFIG.model_copy(update={"max_value_tokens": 16})
+    function = FunctionDefinition(
+        name="fn",
+        description="A test function.",
+        parameters={"n": ParameterSpec(type="integer")},
+        returns=ParameterSpec(type="string"),
+    )
+    fake.target = 'fn", "arguments": {"n": ' + "9" * 400 + "}}"
+    decoder = ConstrainedDecoder(
+        model=cast(Small_LLM_Model, fake),
+        functions=[function],
+        config=config,
+    )
+    result = decoder.generate_call("a prompt")
+    value = result.parameters["n"]
+    assert type(value) is int
+    assert str(value) == "9" * 15
+
+
+def test_many_parameters(fake: FakeModel) -> None:
+    """Eight parameters of every type, one string holding , and }}.
+
+    Exercises the ``end`` switching between ``,`` and ``}}`` several
+    times, and the space before every value but the first.
+    """
+    parameters = _call(
+        fake,
+        {f"p{i}": kind for i, kind in enumerate(
+            ["integer", "number", "string", "boolean",
+             "integer", "string", "number", "boolean"])},
+        ", ".join(f'"p{i}": {value}' for i, value in enumerate(
+            ["-3", "2.5", '"x"', "true", "0", '"a, b}} c"', "10", "false"])),
+    )
+    assert parameters == {
+        "p0": -3, "p1": 2.5, "p2": "x", "p3": True,
+        "p4": 0, "p5": "a, b}} c", "p6": 10.0, "p7": False,
+    }
+    assert type(parameters["p0"]) is int
+    assert type(parameters["p6"]) is float
+
+
+def test_zero_parameters(fake: FakeModel) -> None:
+    """A function without parameters returns an empty argument dict.
+
+    No value is generated, so the closing ``}}`` of the shown JSON is
+    never forced; the decoder builds its result by itself, and the
+    tokens it generated are display-only.
+    """
+    decoder = ConstrainedDecoder(
+        model=cast(Small_LLM_Model, fake),
+        functions=[FunctionDefinition(
+            name="fn", description="A test function.",
+            parameters={}, returns=ParameterSpec(type="string"),
+        )],
+        config=CONFIG,
+    )
+    fake.target = 'fn", "arguments": {}}}'
+    result = decoder.generate_call("a prompt")
+    assert result.name == "fn"
+    assert result.parameters == {}
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "",
+        'Say "hello" to {name}',
+        "{system} and {user}",
+        'back\\slash and "quote"',
+        "first\nsecond",
+    ],
+)
+def test_prompt_with_special_characters(
+    fake: FakeModel, prompt: str,
+) -> None:
+    """Odd prompts decode normally and stay verbatim in the chat prompt.
+
+    The prompt is a format *value*, never a template: a placeholder
+    typed by the user, such as ``{system}``, must not be substituted.
+    """
+    decoder = ConstrainedDecoder(
+        model=cast(Small_LLM_Model, fake),
+        functions=[FunctionDefinition(
+            name="fn", description="A test function.",
+            parameters={"s": ParameterSpec(type="string")},
+            returns=ParameterSpec(type="string"),
+        )],
+        config=CONFIG,
+    )
+    fake.target = 'fn", "arguments": {"s": "hi"}}'
+    result = decoder.generate_call(prompt)
+    assert result.prompt == prompt
+    assert result.parameters == {"s": "hi"}
+    assert prompt in decoder._build_prompt(prompt)
+
+
+@pytest.mark.parametrize(
+    "name, arguments, expected",
+    [
+        ("fn_int", '"n": 7', {"n": 7}),
+        ("fn_str", '"n": "hi"', {"n": "hi"}),
+    ],
+)
+def test_ambiguous_choice_keeps_the_chosen_schema(
+    fake: FakeModel, name: str, arguments: str, expected: dict[str, Any],
+) -> None:
+    """Two functions fit the same prompt; the constraints follow the pick.
+
+    They even share the parameter name with different declared types:
+    whichever function the model prefers, its own schema is enforced
+    and the other's is ignored.
+    """
+    functions = [
+        FunctionDefinition(
+            name="fn_int", description="A test function.",
+            parameters={"n": ParameterSpec(type="integer")},
+            returns=ParameterSpec(type="string"),
+        ),
+        FunctionDefinition(
+            name="fn_str", description="A test function.",
+            parameters={"n": ParameterSpec(type="string")},
+            returns=ParameterSpec(type="string"),
+        ),
+    ]
+    fake.target = f'{name}", "arguments": {{{arguments}}}}}'
+    decoder = ConstrainedDecoder(
+        model=cast(Small_LLM_Model, fake), functions=functions,
+        config=CONFIG,
+    )
+    result = decoder.generate_call("a prompt")
+    assert result.name == name
+    assert result.parameters == expected
+    assert type(result.parameters["n"]) is type(expected["n"])
