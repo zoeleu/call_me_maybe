@@ -22,7 +22,7 @@ JSON_ESCAPABLE = '"\\/bfnrt'
 # of ``end`` were matched (only used by the "end" phase).
 Phase = Literal[
     "start", "space", "string", "escape",
-    "sign", "int", "period", "fraction", "true", "false", "end",
+    "sign", "int", "zero", "period", "fraction", "true", "false", "end",
 ]
 State = tuple[Phase, int]
 START: State = ("start", 0)
@@ -71,17 +71,24 @@ def _boolean_step(
 
 
 def _number_step(phase: Phase, char: str, end: str) -> State | None:
-    """Advance a number value (``-12``, ``3.5``) by one character."""
+    """Advance a number value (``-12``, ``3.5``) by one character.
+
+    The ``zero`` phase remembers the integer part is a single ``0``:
+    JSON forbids digits after a leading zero (``007``, ``-01``), but
+    still allows a fraction (``0.5``) or the end of the value.
+    """
     if char in DIGITS:
-        if phase in ("start", "space", "sign", "int"):
+        if phase in ("start", "space", "sign"):
+            return ("zero", 0) if char == "0" else ("int", 0)
+        if phase == "int":
             return ("int", 0)
         if phase in ("period", "fraction"):
             return ("fraction", 0)
     if char == "-" and phase in ("start", "space"):
         return ("sign", 0)
-    if char == "." and phase == "int":
+    if char == "." and phase in ("int", "zero"):
         return ("period", 0)
-    if char == end[0] and phase in ("int", "fraction"):
+    if char == end[0] and phase in ("int", "zero", "fraction"):
         return ("end", 1)
     return None
 
