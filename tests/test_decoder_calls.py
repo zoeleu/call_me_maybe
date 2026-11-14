@@ -14,7 +14,13 @@ from huggingface_hub import hf_hub_download
 from llm_sdk import Small_LLM_Model
 from transformers import AutoTokenizer
 
-from src.decoder import ConstrainedDecoder, State
+from src.decoder import (
+    ConstrainedDecoder,
+    GenerationError,
+    State,
+    _check_schema,
+    _parse_value,
+)
 from src.models import FunctionDefinition, ParameterSpec, PromptConfig
 
 MODEL_NAME = "Qwen/Qwen3-0.6B"
@@ -193,3 +199,51 @@ def test_integer_cannot_take_a_fraction(fake: FakeModel) -> None:
     """A model that wants ``4.5`` for an integer is stopped at the dot."""
     with pytest.raises(AssertionError):
         _call(fake, {"n": "integer"}, '"n": 4.5')
+
+
+def test_number_overflow_is_rejected_at_parse() -> None:
+    """A decimal too big for float64 raises, not a silent ``inf``.
+
+    ``float()`` on a string never raises on overflow: it returns
+    infinity, which pydantic would serialize as ``null``.
+    """
+    with pytest.raises(GenerationError):
+        _parse_value("9" * 400, "number")
+
+
+def test_number_overflow_boundary() -> None:
+    """308 nines is the largest all-nines number a float64 can hold."""
+    assert _parse_value("9" * 308, "number") == float("9" * 308)
+    with pytest.raises(GenerationError):
+        _parse_value("9" * 309, "number")
+
+
+@pytest.mark.parametrize("value_type", ["integer", "number"])
+def test_schema_keeps_bools_out_of_numbers(value_type: str) -> None:
+    """``bool`` is a subclass of ``int``; it must not pass as a number."""
+    with pytest.raises(GenerationError):
+        _check_schema("a", True, value_type)
+
+
+def test_number_overflow_fails_the_call(fake: FakeModel) -> None:
+    """A value limit big enough to overflow float64 fails the whole call.
+
+    Reproduction of the reported bug: with ``max_value_tokens=400`` the
+    model may write hundreds of digits; parsing them gave ``inf`` and the
+    result JSON had ``null`` instead of a number.
+    """
+    config = CONFIG.model_copy(update={"max_value_tokens": 420})
+    function = FunctionDefinition(
+        name="fn",
+        description="A test function.",
+        parameters={"a": ParameterSpec(type="number")},
+        returns=ParameterSpec(type="string"),
+    )
+    fake.target = 'fn", "arguments": {"a": ' + "9" * 420 + "}}"
+    decoder = ConstrainedDecoder(
+        model=cast(Small_LLM_Model, fake),
+        functions=[function],
+        config=config,
+    )
+    with pytest.raises(GenerationError):
+        decoder.generate_call("a prompt")

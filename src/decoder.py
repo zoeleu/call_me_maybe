@@ -1,6 +1,7 @@
 """Constrained decoding: mask logits so only valid tokens can be chosen."""
 
 import json
+import math
 from pathlib import Path
 from typing import Any, Callable, Literal
 
@@ -124,6 +125,54 @@ def _advance(
     return state
 
 
+def _parse_value(raw: str, value_type: str) -> str | float | int | bool:
+    """Parse generated value text (without ``end``) into a Python value.
+
+    ``float()`` on too-long text does not raise: it returns infinity, so
+    finiteness is checked explicitly and reported as a generation error.
+    """
+    try:
+        if value_type == "string":
+            return str(json.loads(raw))
+        if value_type == "integer":
+            return int(raw)
+        if value_type == "boolean":
+            return {"true": True, "false": False}[raw]
+        value = float(raw)
+    except (ValueError, KeyError) as error:
+        raise GenerationError(
+            f"cannot parse generated {value_type} value {raw!r}"
+        ) from error
+    if not math.isfinite(value):
+        raise GenerationError(
+            f"generated {value_type} value {raw!r} is not finite"
+        )
+    return value
+
+
+def _check_schema(name: str, value: Any, value_type: str) -> None:
+    """Check a parsed value against the parameter's declared JSON type.
+
+    ``bool`` is a subclass of ``int`` in Python, so it is kept out of
+    "integer" and "number" explicitly. ``value_type`` must be one of
+    ``SUPPORTED_PARAMETER_TYPES``.
+    """
+    if value_type == "string":
+        valid = isinstance(value, str)
+    elif value_type == "boolean":
+        valid = isinstance(value, bool)
+    elif value_type == "integer":
+        valid = isinstance(value, int) and not isinstance(value, bool)
+    elif value_type == "number":
+        valid = isinstance(value, (int, float)) and not isinstance(value, bool)
+    else:
+        raise ValueError(f"unsupported parameter type {value_type!r}")
+    if not valid:
+        raise GenerationError(
+            f"parameter {name!r} got {value!r}, expected type {value_type!r}"
+        )
+
+
 class ConstrainedDecoder:
     """Drives the LLM token by token to emit a schema-valid function call."""
 
@@ -186,13 +235,15 @@ class ConstrainedDecoder:
             remaining.remove(name)
             # The last value also closes "parameters" and the whole call.
             end = "," if remaining else "}}"
-            parameters[name] = self._choose_value(
+            value = self._choose_value(
                 ids, function.parameters[name].type, end,
                 show=lambda text: self._show_call(
                     function.name, shown + [f"{name}={text}"]
                 ),
             )
-            shown.append(f"{name}={json.dumps(parameters[name])}")
+            _check_schema(name, value, function.parameters[name].type)
+            parameters[name] = value
+            shown.append(f"{name}={json.dumps(value)}")
         self._show_call(function.name, shown, closed=True)
         if self.on_call_done is not None:
             self.on_call_done()
@@ -305,18 +356,7 @@ class ConstrainedDecoder:
 
         written = self._generate_with(ids, allowed_next, show_value)
         raw = self.model.decode(written)[:-len(end)].strip()
-        try:
-            if value_type == "string":
-                return str(json.loads(raw))
-            if value_type == "integer":
-                return int(raw)
-            if value_type == "boolean":
-                return {"true": True, "false": False}[raw]
-            return float(raw)
-        except (ValueError, KeyError) as error:
-            raise GenerationError(
-                f"cannot parse generated {value_type} value {raw!r}"
-            ) from error
+        return _parse_value(raw, value_type)
 
     def _value_table(
         self, value_type: str, end: str, state: State
