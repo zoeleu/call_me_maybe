@@ -360,9 +360,19 @@ the SDK does not have the cached one.
   validated by the `PromptConfig` pydantic model, so they can be tuned
   without touching the decoder. The schema is generated from the same model,
   so the editor and the program agree on what is valid.
-- **pydantic everywhere.** Function definitions, prompts, results and the
-  prompt config are all pydantic models, and files are read and written
-  through `TypeAdapter`.
+- **pydantic where the data is.** Function definitions, prompts, results and
+  the prompt config are all pydantic models, and files are read and written
+  through `TypeAdapter`. The requirement stops there on purpose. The two
+  other classes hold behaviour, not data, and gain nothing from pydantic:
+  `ConstrainedDecoder` is a stateful algorithm (a tokenizer scan, a
+  state-machine token cache, callbacks), and `CallPrinter` is terminal
+  drawing. Their inputs are already validated before they are built
+  (`PipelineInputs` for the decoder, a tty check for the printer), so
+  wrapping them in `BaseModel` would only force
+  `arbitrary_types_allowed=True` on every field — an SDK model object,
+  callables, private caches — to validate nothing. The exception classes
+  (`GenerationError`, `CLIError`) are plain for the same reason: pydantic
+  models are not exceptions.
 - **stderr for progress, file for results.** The terminal display (the call
   being written in gray, then `name(args)` lines) never mixes with
   the output file. The live display is only enabled when stderr is a
